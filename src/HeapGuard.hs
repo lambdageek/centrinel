@@ -25,11 +25,11 @@ inp fp = parseCFile (newGCC "gcc") Nothing [] fp
 p :: CTranslUnit -> IO ()
 p = print . P.prettyUsingInclude 
 
-think :: CTranslUnit -> Either [CError] (A.GlobalDecls, [CError])
+think :: CTranslUnit -> Either [CError] ((A.GlobalDecls, HG.RegionIdentMap), [CError])
 think u = HG.runHGTrav HG.inferDeclEvent (A.analyseAST u)
   
 
-think' :: CTranslUnit -> IO A.GlobalDecls
+think' :: CTranslUnit -> IO (A.GlobalDecls, HG.RegionIdentMap)
 think' u =
   case think u of
     Left errs -> do

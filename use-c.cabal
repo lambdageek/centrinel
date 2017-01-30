@@ -21,7 +21,8 @@ library
                        HeapGuard.Trav,
                        HeapGuard.RegionUnification,
                        HeapGuard.RegionInference,
-                       HeapGuard.Region
+                       HeapGuard.Region,
+                       Control.Unification.IntVar.Extras
   -- other-modules:       
   -- other-extensions:    
   build-depends:       base >=4.9 && <4.10,

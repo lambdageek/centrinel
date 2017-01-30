@@ -3,7 +3,6 @@
 module HeapGuard.RegionUnification where
 
 import Control.Monad.Trans.Class
-import qualified Control.Monad.State.Class as St
 import Control.Monad.Except
 
 import Data.Traversable (fmapDefault, foldMapDefault)
@@ -11,6 +10,8 @@ import Data.Traversable (fmapDefault, foldMapDefault)
 import qualified Control.Unification as U
 import qualified Control.Unification.IntVar as U
 import qualified Control.Unification.Types as U
+
+import qualified Control.Unification.IntVar.Extras as ExtraU
 
 newtype RegionVar = RegionVar U.IntVar
 
@@ -54,15 +55,5 @@ runUnifyRegT = U.evalIntBindingT . unUnifyRegT
 
 liftCatch :: Monad m => (forall b . m b -> (e -> m b) -> m b) -> UnifyRegT m a -> (e -> UnifyRegT m a) -> UnifyRegT m a
 liftCatch catch (UnifyRegT comp) handler_ =
-  let handler = unUnifyRegT . handler_
-      runWithState :: St.MonadState s m => m a -> s -> m a
-      runWithState c st = St.put st >> c
-      guardedComp st = U.runIntBindingT (runWithState comp st) `catch` (\e -> U.runIntBindingT (runWithState (handler e) st))
-  in UnifyRegT $ do
-    initialSt <- St.get
-    (ans, finalSt) <- lift $ guardedComp initialSt
-    St.put finalSt
-    return ans
-  
-         
-      
+  UnifyRegT (ExtraU.liftCatch catch comp handler)
+  where handler = unUnifyRegT . handler_

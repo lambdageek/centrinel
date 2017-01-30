@@ -1,72 +1,48 @@
-module HeapGuard.Trav where
+{-# language GeneralizedNewtypeDeriving #-}
+module HeapGuard.Trav (
+  HGTrav
+  , runHGTrav
+  , HGAnalysis
+  ) where
 
-import Data.Monoid (First(..))
+import Control.Monad.Trans.Class 
+import Control.Monad.Trans.Reader (ReaderT)
+import qualified Control.Monad.Trans.Reader as Reader
 
--- data
-import qualified Language.C.Data.Ident as Id
+import Language.C.Data.Error (CError)
 
--- syntax
-import qualified Language.C.Syntax.AST as Syn
-import qualified Language.C.Syntax.Constants as Syn
-
--- semantics
+import Language.C.Analysis.SemRep (DeclEvent)
 import qualified Language.C.Analysis.TravMonad as AM
-import qualified Language.C.Analysis.SemRep as A
 
--- utils
-import qualified Language.C.Pretty as P
+import qualified HeapGuard.RegionUnification as U
 
-import Language.C.Analysis.Debug () -- P.Pretty instances 
+type HGAnalysis s = DeclEvent -> HGTrav s ()
 
-import HeapGuard.Warning (hgWarn)
-import HeapGuard.Region
-import HeapGuard.RegionUnification
+newtype HGTrav s a = HGTrav { unHGTrav :: ReaderT (HGAnalysis s) (U.UnifyRegT (AM.Trav s)) a}
+  deriving (Functor, Applicative, Monad)
 
-extraDecl :: (RegionUnification v m, AM.MonadTrav m) => A.DeclEvent -> m ()
-extraDecl e =
-  case e of
-    A.TagEvent (A.CompDef structTy@(A.CompType suref A.StructTag _ attrs ni)) -> do
-      m <- deriveRegionFromMember structTy
-      r <- assignRegion suref
-      case m of
-        Just r' -> sameRegion r' r
-        Nothing -> return ()
-    _ -> return ()
---      AM.warn (hgWarn ("Found struct " ++  show (P.pretty suref) ++ " with at least one member and region " ++ show r) ni)
+instance AM.MonadName (HGTrav s) where
+  genName = HGTrav $ lift $ lift AM.genName
 
-assignRegion :: (RegionUnification v m, AM.MonadTrav m) => Id.SUERef -> m v
-assignRegion _sueref = newRegion
+instance AM.MonadSymtab (HGTrav s) where
+  getDefTable = HGTrav $ lift $ lift AM.getDefTable
+  withDefTable = HGTrav . lift . lift . AM.withDefTable
 
-hasRegionAttr :: A.Attributes -> Maybe Region
-hasRegionAttr = getFirst . foldMap (First . from)
-  where
-    from (A.Attr ident [Syn.CConst (Syn.CIntConst r _)] _ni) | Id.identToString ident == "__region" = Just (Region $ fromInteger $ Syn.getCInteger r)
-    from _ = Nothing
+instance AM.MonadCError (HGTrav s) where
+  throwTravError = HGTrav . lift . lift . AM.throwTravError
+  catchTravError (HGTrav c) handler = HGTrav (Reader.liftCatch (U.liftCatch AM.catchTravError) c (unHGTrav . handler))
+  recordError = HGTrav . lift . lift . AM.recordError
+  getErrors = HGTrav $ lift $ lift AM.getErrors
 
-deriveRegionFromMember :: (RegionUnification v m) => A.CompType -> m (Maybe v)
-deriveRegionFromMember (A.CompType suref A.StructTag (A.MemberDecl (A.VarDecl _varName _dattrs memberType) Nothing _niMember :_) _ _ni) =
-  deriveRegionFromType memberType
-deriveRegionFromMember _ = return Nothing
+instance U.RegionUnification U.RegionVar (HGTrav s) where
+  newRegion = HGTrav $ lift U.newRegion
+  sameRegion v1 v2 = HGTrav $ lift $ U.sameRegion v1 v2
 
-deriveRegionFromType :: (RegionUnification v m) => A.Type -> m (Maybe v)
-deriveRegionFromType (A.DirectType t _qs _attrs) = deriveRegionFromTypeName t
-deriveRegionFromType (A.TypeDefType td _qs _attrs) = deriveRegionFromTypeDefRef td
-deriveRegionFromType _ = return Nothing
+instance AM.MonadTrav (HGTrav s) where
+  handleDecl ev = do
+    handler <- HGTrav Reader.ask
+    handler ev
 
-deriveRegionFromTypeName :: (RegionUnification v m) => A.TypeName -> m (Maybe v)
-deriveRegionFromTypeName (A.TyComp (A.CompTypeRef sueref A.StructTag _ni)) = deriveRegionFromSUERef sueref
-deriveRegionFromTypeName _ = return Nothing
+runHGTrav :: HGAnalysis () -> HGTrav () a -> Either [CError] (a, [CError])
+runHGTrav az (HGTrav comp) = AM.runTrav_ (U.runUnifyRegT (Reader.runReaderT comp az))
 
-deriveRegionFromTypeDefRef :: RegionUnification v m => A.TypeDefRef -> m (Maybe v)
-deriveRegionFromTypeDefRef (A.TypeDefRef ident Nothing _ni) = lookupTypedefRegion ident
-deriveRegionFromTypeDefRef (A.TypeDefRef _ (Just t) _ni) = deriveRegionFromType t
-
-deriveRegionFromSUERef :: RegionUnification v m => Id.SUERef -> m (Maybe v)
-deriveRegionFromSUERef (Id.NamedRef ident) = Just <$> lookupStructTagRegion ident
-deriveRegionFromSUERef _ = return Nothing
-
-lookupTypedefRegion :: RegionUnification v m => Id.Ident -> m (Maybe v)
-lookupTypedefRegion _ = return Nothing
-
-lookupStructTagRegion :: RegionUnification v m => Id.Ident -> m v
-lookupStructTagRegion _ = return (error "finish me")

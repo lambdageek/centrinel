@@ -20,6 +20,7 @@ library
                        HeapGuard.Warning,
                        HeapGuard.Trav,
                        HeapGuard.RegionUnification,
+                       HeapGuard.RegionInference,
                        HeapGuard.Region
   -- other-modules:       
   -- other-extensions:    

@@ -1,5 +1,7 @@
+-- | Analyze a parsed C file and create region unification constraints
+--
 {-# LANGUAGE FunctionalDependencies #-}
-module HeapGuard.RegionInference (inferDeclEvent, hasRegionAttr) where
+module HeapGuard.RegionInference (inferDeclEvent, hasRegionAttr, applyBindingTagDef) where
 
 import Data.Monoid (First(..))
 
@@ -23,11 +25,14 @@ import HeapGuard.RegionIdent
 inferDeclEvent :: (RegionAssignment RegionIdent v m, RegionUnification v m, AM.MonadTrav m) => A.DeclEvent -> m ()
 inferDeclEvent e =
   case e of
-    A.TagEvent (A.CompDef structTy@(A.CompType suref A.StructTag _ _attrs _ni)) -> do
+    A.TagEvent (A.CompDef structTy@(A.CompType suref A.StructTag _ attrs _ni)) -> do
       m <- deriveRegionFromMember structTy
       r <- assignRegion (StructTagId suref)
       case m of
         Just r' -> sameRegion r' r
+        Nothing -> return ()
+      case hasRegionAttr attrs of
+        Just rc -> constantRegion r rc
         Nothing -> return ()
     A.TypeDefEvent (A.TypeDef typedefIdent ty _ _) -> do
       m <- deriveRegionFromType ty
@@ -67,3 +72,10 @@ deriveRegionFromSUERef suref = assignRegion (StructTagId suref)
 lookupTypedefRegion :: (RegionAssignment RegionIdent v m, RegionUnification v m) => Id.Ident -> m v
 lookupTypedefRegion ident = assignRegion (TypedefId ident)
 
+-- Apply the current unification bindings to a given struct definition and return the inferred region.
+applyBindingTagDef :: (ApplyUnificationState m, RegionAssignment RegionIdent RegionVar m) => A.TagDef -> m RegionScheme
+applyBindingTagDef (A.CompDef (A.CompType sueref A.StructTag _members _attrs _ni)) = do
+  v <- assignRegion (StructTagId sueref)
+  m <- applyUnificationState (regionUnifyVar v)
+  return $ extractRegionScheme m
+applyBindingTagDef _ = return PolyRS

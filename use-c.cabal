@@ -31,7 +31,8 @@ library
                        mtl >= 2.2.1,
                        pretty >= 1.1.3.4,
                        transformers >= 0.5.2.0,
-                       unification-fd >= 0.10
+                       unification-fd >= 0.10,
+                       contravariant >= 1.4
   hs-source-dirs:      src
   ghc-options:         -Wall
   default-extensions:  FlexibleContexts, FlexibleInstances,

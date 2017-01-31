@@ -2,6 +2,7 @@
 module HeapGuard.Trav (
   HGTrav
   , runHGTrav
+  , evalHGTrav
   , HGAnalysis
   , RegionIdentMap
   ) where
@@ -46,6 +47,10 @@ instance AM.MonadCError (HGTrav s) where
 instance U.RegionUnification U.RegionVar (HGTrav s) where
   newRegion = HGTrav $ lift $ lift U.newRegion
   sameRegion v1 v2 = HGTrav $ lift $ lift $ U.sameRegion v1 v2
+  constantRegion v c = HGTrav $ lift $ lift $ U.constantRegion v c
+
+instance U.ApplyUnificationState (HGTrav s) where
+  applyUnificationState = HGTrav . lift . lift . U.applyUnificationState
 
 (-:=) :: U.RegionVar -> Maybe U.RegionUnifyTerm -> HGTrav s U.RegionUnifyTerm
 v -:= Nothing = return (U.regionUnifyVar v)
@@ -81,4 +86,9 @@ runHGTrav :: HGAnalysis ()
           -> Either [CError] ((a, RegionIdentMap), [CError])
 -- runHGTrav :: HGAnalysis () -> HGTrav () a -> Either [CError] (a, [CError])
 runHGTrav az (HGTrav comp) = AM.runTrav_ (U.runUnifyRegT (State.runStateT (Reader.runReaderT comp az) Map.empty))
+
+evalHGTrav :: HGAnalysis ()
+          -> HGTrav () a
+          -> Either [CError] (a, [CError])
+evalHGTrav az (HGTrav comp) = AM.runTrav_ (U.runUnifyRegT (State.evalStateT (Reader.runReaderT comp az) Map.empty))
 

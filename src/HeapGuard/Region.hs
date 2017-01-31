@@ -7,3 +7,4 @@ newtype Region = Region Int
 
 -- A region scheme is either region polymorphic (can be in any region) or a single fixed region
 data RegionScheme = PolyRS | FixedRS Region
+  deriving (Show, Eq)

@@ -20,6 +20,7 @@ import Language.C.Analysis.Debug () -- P.Pretty instances
 
 import HeapGuard.Region
 import HeapGuard.RegionUnification
+import HeapGuard.RegionUnification.Term (regionUnifyVar, RegionVar)
 import HeapGuard.RegionIdent
 
 inferDeclEvent :: (RegionAssignment RegionIdent v m, RegionUnification v m, AM.MonadTrav m) => A.DeclEvent -> m ()

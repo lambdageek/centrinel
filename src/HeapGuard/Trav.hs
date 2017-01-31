@@ -22,6 +22,7 @@ import qualified Language.C.Analysis.TravMonad as AM
 
 import qualified HeapGuard.RegionIdent as HGId
 import qualified HeapGuard.RegionUnification as U
+import qualified HeapGuard.RegionUnification.Term as U
 import HeapGuard.Warning (hgWarn)
 
 type HGAnalysis s = DeclEvent -> HGTrav s ()

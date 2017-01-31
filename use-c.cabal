@@ -19,7 +19,9 @@ library
   exposed-modules:     HeapGuard,
                        HeapGuard.Warning,
                        HeapGuard.Trav,
+                       HeapGuard.RegionMismatchError,
                        HeapGuard.RegionUnification,
+                       HeapGuard.RegionUnification.Term,
                        HeapGuard.RegionInference,
                        HeapGuard.Region,
                        Control.Unification.IntVar.Extras

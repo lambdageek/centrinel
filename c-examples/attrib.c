@@ -1,10 +1,6 @@
 
 #define MANAGED_HEAP 1
 
-struct __attribute__((__region(MANAGED_HEAP))) X {
-	int a;
-};
-
 typedef struct X X;
 
 /* managed heap, derived from member */
@@ -14,6 +10,10 @@ struct Y {
 
 typedef struct Y Y;
 
+struct __attribute__((__region(MANAGED_HEAP))) X {
+	int a;
+};
+
 /* no fixed heap */
 struct Z {
 	int z;
@@ -22,4 +22,8 @@ struct Z {
 /* also no fixed heap */
 struct W {
 	Y* py;
+};
+
+struct __attribute__((__region(2))) H {
+	X x;
 };

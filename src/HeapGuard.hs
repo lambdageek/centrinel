@@ -12,10 +12,11 @@ import Language.C.Syntax.AST (CTranslUnit)
 import Language.C.System.GCC (newGCC)
 
 import Language.C.Data.Ident (SUERef)
-import Language.C.Data.Error (CError)
+import Language.C.Data.Error (CError, changeErrorLevel, ErrorLevel(LevelWarn))
 
 import qualified Language.C.Analysis.AstAnalysis as A
 import qualified Language.C.Analysis.SemRep as A
+import qualified Language.C.Analysis.TravMonad as A
 
 import qualified Language.C.Pretty as P
 
@@ -31,13 +32,21 @@ p = print . P.prettyUsingInclude
 
 type RegionInferenceResult = Map.Map SUERef RegionScheme
 
+inferRegions :: A.GlobalDecls -> HG.HGTrav s RegionInferenceResult
+inferRegions g = do
+  let tagged = A.gTags g
+  traverse HG.applyBindingTagDef tagged
+
 think :: CTranslUnit -> -- Either [CError] ((A.GlobalDecls, HG.RegionIdentMap), [CError])
   Either [CError] ((A.GlobalDecls, RegionInferenceResult), [CError])
-think u = HG.evalHGTrav HG.inferDeclEvent $ do
+think u = HG.evalHGTrav (protect HG.inferDeclEvent) $ do
   g <- A.analyseAST u
-  let tagged = A.gTags g
-  regions <- traverse HG.applyBindingTagDef tagged
+  regions <- inferRegions g
   return (g, regions)
+  where
+    -- catch any errors due to this declaration, record them and continue.
+    protect :: A.MonadCError m => (a -> m ()) -> (a -> m ())
+    protect f x = A.catchTravError (f x) (\e -> A.recordError $ changeErrorLevel e LevelWarn)
 
 think' :: CTranslUnit -> IO (A.GlobalDecls, RegionInferenceResult)
 think' u =

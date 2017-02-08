@@ -1,9 +1,17 @@
+-- | HeapGuard C language traversal monad
+--
+-- The @HGTrav@ monad stack has:
+-- 1. a collection of analysis hooks that are triggered by traversals of C ASTs,
+-- 2. and a unification state of region unification constraints and a map from C types to region unification variables.
+--
+--
 {-# language GeneralizedNewtypeDeriving #-}
 module HeapGuard.Trav (
   HGTrav
   , runHGTrav
   , evalHGTrav
   , HGAnalysis
+  , withHGAnalysis
   , RegionIdentMap
   ) where
 
@@ -82,14 +90,23 @@ instance AM.MonadTrav (HGTrav s) where
     handler <- HGTrav Reader.ask
     handler ev
 
-runHGTrav :: HGAnalysis ()
-          -> HGTrav () a
+withHGAnalysis :: HGAnalysis s -> HGTrav s a -> HGTrav s a
+withHGAnalysis az =
+  HGTrav . Reader.local (addAnalysis az) . unHGTrav
+  where
+    -- new analysis runs last
+    addAnalysis m = (>> m)
+
+runHGTrav :: HGTrav () a
           -> Either [CError] ((a, RegionIdentMap), [CError])
 -- runHGTrav :: HGAnalysis () -> HGTrav () a -> Either [CError] (a, [CError])
-runHGTrav az (HGTrav comp) = AM.runTrav_ (U.runUnifyRegT (State.runStateT (Reader.runReaderT comp az) Map.empty))
+runHGTrav (HGTrav comp) = AM.runTrav_ (U.runUnifyRegT (State.runStateT (Reader.runReaderT comp az) Map.empty))
+  where
+    az = const (return ())
 
-evalHGTrav :: HGAnalysis ()
-          -> HGTrav () a
+evalHGTrav :: HGTrav () a
           -> Either [CError] (a, [CError])
-evalHGTrav az (HGTrav comp) = AM.runTrav_ (U.runUnifyRegT (State.evalStateT (Reader.runReaderT comp az) Map.empty))
+evalHGTrav (HGTrav comp) = AM.runTrav_ (U.runUnifyRegT (State.evalStateT (Reader.runReaderT comp az) Map.empty))
+  where
+    az = const (return ())
 

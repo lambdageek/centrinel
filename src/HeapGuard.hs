@@ -2,7 +2,7 @@ module HeapGuard where
 
 import Control.Monad (unless)
 
-import qualified Data.Map as Map
+import qualified Data.Assoc
 
 import Language.C (parseCFile)
 import Language.C.Parser (ParseError)
@@ -12,7 +12,7 @@ import Language.C.Syntax.AST (CTranslUnit)
 import Language.C.System.GCC (newGCC)
 
 import Language.C.Data.Ident (SUERef)
-import Language.C.Data.Error (CError, changeErrorLevel, ErrorLevel(LevelWarn))
+import Language.C.Data.Error (changeErrorLevel, ErrorLevel(LevelWarn))
 
 import qualified Language.C.Analysis.AstAnalysis as A
 import qualified Language.C.Analysis.SemRep as A
@@ -30,36 +30,38 @@ inp fp = parseCFile (newGCC "gcc") Nothing [] fp
 p :: CTranslUnit -> IO ()
 p = print . P.prettyUsingInclude 
 
-type RegionInferenceResult = Map.Map SUERef RegionScheme
+pp :: P.Pretty a => a -> IO ()
+pp = print . P.pretty
 
-inferRegions :: A.GlobalDecls -> HG.HGTrav s RegionInferenceResult
-inferRegions g = do
+type RegionInferenceResult = Data.Assoc.Assoc SUERef RegionScheme
+
+getInferredRegions :: A.GlobalDecls -> HG.HGTrav s RegionInferenceResult
+getInferredRegions g = do
   let tagged = A.gTags g
-  traverse HG.applyBindingTagDef tagged
+  Data.Assoc.Assoc <$> traverse HG.applyBindingTagDef tagged
 
-think :: CTranslUnit -> -- Either [CError] ((A.GlobalDecls, HG.RegionIdentMap), [CError])
-  Either [CError] ((A.GlobalDecls, RegionInferenceResult), [CError])
-think u = HG.evalHGTrav (protect HG.inferDeclEvent) $ do
-  g <- A.analyseAST u
-  regions <- inferRegions g
+inferRegions :: CTranslUnit -> HG.HGTrav s (A.GlobalDecls, RegionInferenceResult)
+inferRegions u = do
+  g <- HG.withHGAnalysis (nonFatal . HG.inferDeclEvent) $ A.analyseAST u
+  regions <- getInferredRegions g
   return (g, regions)
   where
     -- catch any errors due to this declaration, record them and continue.
-    protect :: A.MonadCError m => (a -> m ()) -> (a -> m ())
-    protect f x = A.catchTravError (f x) (\e -> A.recordError $ changeErrorLevel e LevelWarn)
+    nonFatal :: A.MonadCError m => m () -> m ()
+    nonFatal comp = A.catchTravError comp (\e -> A.recordError $ changeErrorLevel e LevelWarn)
 
 think' :: CTranslUnit -> IO (A.GlobalDecls, RegionInferenceResult)
 think' u =
-  case think u of
+  case HG.evalHGTrav (inferRegions u) of
     Left errs -> do
       putStrLn "Errors:"
       print errs
       return $ error "no global decls"
-    Right (g, warns) -> do
+    Right (grir, warns) -> do
       unless (null warns) $ do
         putStrLn "Warnings:"
         print warns
-      return g
+      return grir
       
 -- example:
 -- Right ast <- inp "c-examples/attrib.hs"

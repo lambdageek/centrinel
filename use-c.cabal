@@ -24,7 +24,9 @@ library
                        HeapGuard.RegionUnification.Term,
                        HeapGuard.RegionInference,
                        HeapGuard.Region,
-                       Control.Unification.IntVar.Extras
+                       HeapGuard.PrettyPrint,
+                       Control.Unification.IntVar.Extras,
+                       Data.Assoc
   -- other-modules:       
   -- other-extensions:    
   build-depends:       base >=4.9 && <4.10,

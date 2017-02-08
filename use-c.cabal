@@ -26,6 +26,7 @@ library
                        HeapGuard.Region,
                        HeapGuard.PrettyPrint,
                        Control.Unification.IntVar.Extras,
+                       HeapGuard.NakedPointer,
                        Data.Assoc
   -- other-modules:       
   -- other-extensions:    

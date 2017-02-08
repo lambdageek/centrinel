@@ -1,0 +1,2 @@
+module HeapGuard.NakedPointer where
+

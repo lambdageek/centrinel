@@ -12,6 +12,13 @@ newtype Region = Region Int
 data RegionScheme = PolyRS | FixedRS Region
   deriving (Show, Eq)
 
+managedRegion :: Region
+managedRegion = Region 1
+
+isManagedRegion :: RegionScheme -> Bool
+isManagedRegion (FixedRS r) = r == managedRegion
+isManagedRegion PolyRS = False
+
 instance PP.Pretty Region where
   prettyPrec p (Region r) = PP.parenPrec p 10 $ PP.text "Region" <+> PP.int r
 

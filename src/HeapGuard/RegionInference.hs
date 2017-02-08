@@ -1,8 +1,9 @@
 -- | Analyze a parsed C file and create region unification constraints
 --
 {-# LANGUAGE FunctionalDependencies #-}
-module HeapGuard.RegionInference (inferDeclEvent, hasRegionAttr, applyBindingTagDef) where
+module HeapGuard.RegionInference (inferDeclEvent, hasRegionAttr, applyBindingTagDef, justStructTagDefs) where
 
+import qualified Data.Map
 import Data.Monoid (First(..))
 
 -- data
@@ -80,3 +81,9 @@ applyBindingTagDef (A.CompDef (A.CompType sueref A.StructTag _members _attrs _ni
   m <- applyUnificationState (regionUnifyVar v)
   return $ extractRegionScheme m
 applyBindingTagDef _ = return PolyRS
+
+justStructTagDefs :: Ord k => Data.Map.Map k A.TagDef -> Data.Map.Map k A.TagDef
+justStructTagDefs = Data.Map.filter isStruct
+  where
+    isStruct (A.CompDef (A.CompType _sueref A.StructTag _membs _attrs _ni)) = True
+    isStruct _ = False

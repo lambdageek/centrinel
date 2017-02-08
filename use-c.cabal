@@ -23,6 +23,7 @@ library
                        HeapGuard.RegionUnification,
                        HeapGuard.RegionUnification.Term,
                        HeapGuard.RegionInference,
+                       HeapGuard.RegionInferenceResult,
                        HeapGuard.Region,
                        HeapGuard.PrettyPrint,
                        Control.Unification.IntVar.Extras,

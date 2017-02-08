@@ -2,8 +2,6 @@ module HeapGuard where
 
 import Control.Monad (unless)
 
-import qualified Data.Assoc
-
 import Language.C (parseCFile)
 import Language.C.Parser (ParseError)
 
@@ -11,7 +9,6 @@ import Language.C.Syntax.AST (CTranslUnit)
 
 import Language.C.System.GCC (newGCC)
 
-import Language.C.Data.Ident (SUERef)
 import Language.C.Data.Error (changeErrorLevel, ErrorLevel(LevelWarn))
 
 import qualified Language.C.Analysis.AstAnalysis as A
@@ -21,8 +18,8 @@ import qualified Language.C.Analysis.TravMonad as A
 import qualified Language.C.Pretty as P
 
 import qualified HeapGuard.Trav as HG
-import HeapGuard.Region (RegionScheme)
 import qualified HeapGuard.RegionInference as HG
+import HeapGuard.RegionInferenceResult
 
 inp :: FilePath -> IO (Either ParseError CTranslUnit)
 inp fp = parseCFile (newGCC "gcc") Nothing [] fp
@@ -33,12 +30,10 @@ p = print . P.prettyUsingInclude
 pp :: P.Pretty a => a -> IO ()
 pp = print . P.pretty
 
-type RegionInferenceResult = Data.Assoc.Assoc SUERef RegionScheme
-
 getInferredRegions :: A.GlobalDecls -> HG.HGTrav s RegionInferenceResult
 getInferredRegions g = do
-  let tagged = A.gTags g
-  Data.Assoc.Assoc <$> traverse HG.applyBindingTagDef tagged
+  let structDefs = HG.justStructTagDefs (A.gTags g)
+  makeRegionInferenceResult <$> traverse HG.applyBindingTagDef structDefs
 
 inferRegions :: CTranslUnit -> HG.HGTrav s (A.GlobalDecls, RegionInferenceResult)
 inferRegions u = do

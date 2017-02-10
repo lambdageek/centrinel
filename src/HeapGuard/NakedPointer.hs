@@ -158,9 +158,13 @@ nakedPtrCheckDecl dcl =
                  => C.TypeDefRef -> m ()
     goTypeDefRef tdr =
       case tdr of
-        C.TypeDefRef _ (Just ty) ni ->
-          local (NPETypeDefRef ni) $ go ty
-        C.TypeDefRef ident Nothing ni ->
+        -- always lookup the typedef even if the type is available - it makes the
+        -- victim look nicer.  also if we start avoiding revisiting the same
+        -- typedef, this will save us a type traversal.
+        --
+        -- C.TypeDefRef _ (Just ty) ni ->
+        --  local (NPETypeDefRef ni) $ go ty
+        C.TypeDefRef ident _ {-Nothing-} ni ->
           local (NPETypeDefRef ni) (rrLookupTypedef ident >>= goTypeDef)
     goTypeDef :: (RegionResultMonad m, MonadReader NPEPosn m, MonadWriter NPEVictims m)
               => C.TypeDef -> m ()

@@ -9,7 +9,7 @@ distinguish internal runtime data structures (allocated using `malloc`/`free`
 or some kind of memory pool or perhaps `mmap`ed from a dumped image) from user
 objects allocated in a GC managed heap.
 
-In [Mono](https://mono-project.com/) the runtime represents managed objects that derive
+In [Mono](http://www.mono-project.com/) the runtime represents managed objects that derive
 from `System.Object` using a C struct `typedef struct _MonoObject { ... } MonoObject`.  Mono uses the convention that a class dervies from class `T` if its first member is of type T:
 
 ```c
@@ -21,6 +21,8 @@ struct _MonoString {
 
 Mono is transitioning to a regime where pointers to managed memory `MonoObject
 *ptr` must be accessed by the runtime internals indirectly via handles<sup id="ref1">[1](#f1)</sup>: `MonoObjectHandle h`
+
+This package provides a library that analyzes C files to find places where raw pointers to managed memory are used.
 
 ## Installation ##
 

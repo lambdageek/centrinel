@@ -20,7 +20,7 @@ struct _MonoString {
 ```
 
 Mono is transitioning to a regime where pointers to managed memory `MonoObject
-*ptr` must be accessed by the runtime internals indirectly via handles[^1]: `MonoObjectHandle h`
+*ptr` must be accessed by the runtime internals indirectly via handles<sup id="ref1">[1](#f1)</sup>: `MonoObjectHandle h`
 
 ## Installation ##
 
@@ -37,6 +37,8 @@ git clone https://github.com/lambdageek/use-c.git
 cd use-c
 cabal sandbox init
 cabal sandbox add-source ../language-c
+cabal install happy
+cabal install alex
 cabal install --dependencies-only
 cabal configure
 cabal build
@@ -101,4 +103,4 @@ c-examples/attrib.c:39: (column 5) [ERROR]  >>> Naked pointer(s) to managed obje
 
 # Footnotes #
 
-[^1]: One immediate benefit is that if a garbage collection happens while native runtime code is running, we don't have to pin the referenced object, which may reduce fragmentation. [↩](#ref1)
+<b id="f1">1</b>: One immediate benefit is that if a garbage collection happens while native runtime code is running, we don't have to pin the referenced object, which may reduce fragmentation. [↩](#ref1)

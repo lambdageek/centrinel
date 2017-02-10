@@ -10,6 +10,7 @@ import qualified Control.Unification.IntVar as U
 
 import qualified Control.Unification.IntVar.Extras as ExtraU
 
+import qualified Language.C.Data.Node as C
 import qualified Language.C.Analysis.TravMonad as C
 
 import HeapGuard.Region (Region, RegionScheme(..))
@@ -20,6 +21,8 @@ class Monad m => RegionUnification v m | m -> v where
   newRegion :: m v
   sameRegion :: v -> v -> m ()
   constantRegion :: v -> Region -> m ()
+  -- attach
+  regionAddLocation :: C.CNode n => v -> n -> m ()
 
 class ApplyUnificationState m where
   applyUnificationState :: RegionUnifyTerm -> m RegionUnifyTerm
@@ -46,12 +49,17 @@ instance C.MonadCError m => RegionUnification RegionVar (UnifyRegT m) where
     e <- unify (regionUnifyVar v1) (regionUnifyVar v2)
     case e of
       Right _uterm -> return ()
-      Left _err -> error "occurs failure and mismatch failure cannot happen for region unification" -- FIXME: region mismatch can totally happen!
+      Left err -> C.throwTravError err
   constantRegion v c = do
     e <- unify (regionUnifyVar v) (regionUnifyTerm $ constRegionTerm c)
     case e of
       Right _uterm -> return ()
       Left err -> C.throwTravError err
+  regionAddLocation v n = do
+    e <- unify (regionUnifyVar v) (regionUnifyTerm $ dummyLocationTerm $ C.nodeInfo n)
+    case e of
+      Right _uterm -> return ()
+      Left _err -> error "unexpected unification failure from regionAddLocation"
 
 instance C.MonadCError m => ApplyUnificationState (UnifyRegT m) where
   applyUnificationState t = do
@@ -72,7 +80,8 @@ liftCatch catch (UnifyRegT comp) handler_ =
 -- return the @FixedRS r@ where @r@ is the inferred constant region or @PolyRS@ if the region was an unconstrained variable.
 extractRegionScheme :: RegionUnifyTerm -> RegionScheme
 extractRegionScheme (U.UVar {}) = PolyRS
-extractRegionScheme (U.UTerm (ConstRegionTerm r)) = FixedRS r
+extractRegionScheme (U.UTerm (ConstRegionTerm r _l)) = FixedRS r
+extractRegionScheme (U.UTerm (DummyLocTerm {})) = PolyRS -- dummy loc term is same as an unconstrained uvar
 
 
 runFailableUnify :: ExceptT RegionMismatchError m a -> m (Either RegionMismatchError a)

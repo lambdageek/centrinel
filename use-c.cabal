@@ -22,6 +22,7 @@ library
                        HeapGuard.RegionMismatchError,
                        HeapGuard.RegionUnification,
                        HeapGuard.RegionUnification.Term,
+                       HeapGuard.RegionUnification.Loc,
                        HeapGuard.RegionInference,
                        HeapGuard.RegionInferenceResult,
                        HeapGuard.Region,

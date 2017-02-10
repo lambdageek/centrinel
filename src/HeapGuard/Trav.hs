@@ -55,8 +55,9 @@ instance AM.MonadCError (HGTrav s) where
 
 instance U.RegionUnification U.RegionVar (HGTrav s) where
   newRegion = HGTrav $ lift $ lift U.newRegion
-  sameRegion v1 v2 = HGTrav $ lift $ lift $ U.sameRegion v1 v2
-  constantRegion v c = HGTrav $ lift $ lift $ U.constantRegion v c
+  sameRegion v = HGTrav . lift . lift . U.sameRegion v
+  constantRegion v  = HGTrav . lift . lift . U.constantRegion v
+  regionAddLocation v = HGTrav . lift . lift . U.regionAddLocation v
 
 instance U.ApplyUnificationState (HGTrav s) where
   applyUnificationState = HGTrav . lift . lift . U.applyUnificationState

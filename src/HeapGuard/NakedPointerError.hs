@@ -1,7 +1,6 @@
 module HeapGuard.NakedPointerError where
 
 import qualified Language.C.Data.Node as C
-import qualified Language.C.Data.Position as C
 import qualified Language.C.Analysis.SemRep as C
 import qualified Language.C.Data.Error as Err
     
@@ -32,17 +31,10 @@ instance PP.Pretty NPEPosn where
   pretty p0 = PP.vcat $ case p0 of
     NPEDecl ident -> [PP.text "in function declaration" <+> PP.quotes (PP.pretty ident)]
     NPEArg j ident ni p -> [PP.text "in" <+> prettyOrdinal j <+> PP.text "argument" <+> PP.quotes (PP.pretty ident)
-                             <+> PP.text "at" <+> textPos ni, PP.pretty p]
+                             <+> PP.text "at" <+> PP.prettyPos ni, PP.pretty p]
     NPERet p -> [PP.text "in return type", PP.pretty p]
-    NPETypeDefRef ni p -> [PP.text "at" <+> textPos ni, PP.pretty p]
-    NPETypeDefDef ni p -> [PP.text "in type defined at" <+> textPos ni, PP.pretty p]
-    where
-      textPos = PP.text . showPos . C.posOf 
-
-      showPos :: C.Position -> String
-      showPos p | C.isSourcePos p = (C.posFile p) ++ ":" ++ show (C.posRow p) ++ ": " ++
-                                  "(column " ++ show (C.posColumn p) ++ ") "
-                | otherwise = show p ++ ":: "
+    NPETypeDefRef ni p -> [PP.text "at" <+> PP.prettyPos ni, PP.pretty p]
+    NPETypeDefDef ni p -> [PP.text "in type defined at" <+> PP.prettyPos ni, PP.pretty p]
 
 prettyOrdinal :: Integral n => n -> PP.Doc
 prettyOrdinal n = PP.integer (toInteger n) PP.<> suf

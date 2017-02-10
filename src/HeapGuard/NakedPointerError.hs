@@ -1,0 +1,62 @@
+module HeapGuard.NakedPointerError where
+
+import qualified Language.C.Data.Node as C
+import qualified Language.C.Data.Position as C
+import qualified Language.C.Analysis.SemRep as C
+import qualified Language.C.Data.Error as Err
+    
+import qualified HeapGuard.PrettyPrint as PP
+import HeapGuard.PrettyPrint ((<+>))
+
+import Language.C.Analysis.Debug () -- instance PP.Pretty Type
+
+-- a naked pointer to the managed heap in a function declaration. NodeInfo for the return value, or zero or more arguments.
+data NakedPointerError = NakedPointerError !C.NodeInfo ![NPEVictim] !Err.ErrorLevel
+
+instance Show NakedPointerError where
+  show = Err.showError ""
+  
+data NPEVictim = NPEVictim !C.Type !NPEPosn
+
+type NPEVictims = [NPEVictim]
+
+instance PP.Pretty NPEVictim where
+  pretty (NPEVictim ty pos) = PP.fcat [PP.text "Pointer to managed heap" <+> PP.pretty ty
+                                      , PP.nest 8 (PP.pretty pos)
+                                      ]
+
+instance Show NPEVictim where
+  show = PP.render . PP.pretty
+
+instance PP.Pretty NPEPosn where
+  pretty p0 = PP.vcat $ case p0 of
+    NPEDecl ident -> [PP.text "in function declaration" <+> PP.quotes (PP.pretty ident)]
+    NPEArg j ident ni p -> [PP.text "in argument" <+> PP.quotes (PP.pretty ident) <+> PP.int j
+                             <+> PP.text "at" <+> textPos ni, PP.pretty p]
+    NPERet p -> [PP.text "in return type", PP.pretty p]
+    NPETypeDefRef ni p -> [PP.text "at" <+> textPos ni, PP.pretty p]
+    NPETypeDefDef ni p -> [PP.text "in type defined at" <+> textPos ni, PP.pretty p]
+    where
+      textPos = PP.text . showPos . C.posOf 
+
+      showPos :: C.Position -> String
+      showPos p | C.isSourcePos p = (C.posFile p) ++ ":" ++ show (C.posRow p) ++ ": " ++
+                                  "(column " ++ show (C.posColumn p) ++ ") "
+                | otherwise = show p ++ ":: "
+
+-- trace of an error position
+data NPEPosn = NPEArg !Int !C.VarName !C.NodeInfo !NPEPosn -- function argument j
+  | NPERet !NPEPosn -- function return value
+  | NPEDecl !C.VarName -- a declaration (this is always the end of the error position)
+  | NPETypeDefRef !C.NodeInfo !NPEPosn -- a typedef occurrence
+  | NPETypeDefDef !C.NodeInfo !NPEPosn -- the typedef declaration
+
+mkNakedPointerError :: C.NodeInfo -> [NPEVictim] -> NakedPointerError
+mkNakedPointerError ni npes = NakedPointerError ni npes Err.LevelError
+
+instance Err.Error NakedPointerError where
+  errorInfo (NakedPointerError ni victims lvl) = Err.mkErrorInfo lvl msg ni
+    where
+      msg = PP.render $ PP.vcat (msghead : map PP.pretty victims)
+      msghead = PP.text "Naked pointer(s) to managed object(s) found in declaration(s)"
+  changeErrorLevel (NakedPointerError ni victims _lvl) lvl = NakedPointerError ni victims lvl

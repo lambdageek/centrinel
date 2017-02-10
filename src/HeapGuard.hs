@@ -15,11 +15,13 @@ import qualified Language.C.Analysis.AstAnalysis as A
 import qualified Language.C.Analysis.SemRep as A
 import qualified Language.C.Analysis.TravMonad as A
 
-import qualified Language.C.Pretty as P
+import qualified HeapGuard.PrettyPrint as P
 
 import qualified HeapGuard.Trav as HG
 import qualified HeapGuard.RegionInference as HG
 import HeapGuard.RegionInferenceResult
+
+import qualified HeapGuard.NakedPointer as NP
 
 inp :: FilePath -> IO (Either ParseError CTranslUnit)
 inp fp = parseCFile (newGCC "gcc") Nothing [] fp
@@ -46,17 +48,22 @@ inferRegions u = do
     nonFatal comp = A.catchTravError comp (\e -> A.recordError $ changeErrorLevel e LevelWarn)
 
 think' :: CTranslUnit -> IO (A.GlobalDecls, RegionInferenceResult)
-think' u =
-  case HG.evalHGTrav (inferRegions u) of
+think' u = do
+  let work = do
+        grir@(g,rir) <- inferRegions u
+        NP.runInferenceResultT (NP.analyze $ A.gObjs g) (A.gTypeDefs g) rir
+        return grir
+  case HG.evalHGTrav work of
     Left errs -> do
       putStrLn "Errors:"
-      print errs
+      mapM_ print errs
       return $ error "no global decls"
     Right (grir, warns) -> do
       unless (null warns) $ do
         putStrLn "Warnings:"
-        print warns
+        mapM_ print warns
       return grir
+    
       
 -- example:
 -- Right ast <- inp "c-examples/attrib.hs"

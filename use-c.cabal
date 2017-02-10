@@ -28,6 +28,7 @@ library
                        HeapGuard.PrettyPrint,
                        Control.Unification.IntVar.Extras,
                        HeapGuard.NakedPointer,
+                       HeapGuard.NakedPointerError,
                        Data.Assoc
   -- other-modules:       
   -- other-extensions:    

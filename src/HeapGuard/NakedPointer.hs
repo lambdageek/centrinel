@@ -1,22 +1,28 @@
-module HeapGuard.NakedPointer where
+{-# language GeneralizedNewtypeDeriving #-}
+module HeapGuard.NakedPointer (analyze, runInferenceResultT, InferenceResultT) where
 
 import Control.Monad (forM_)
 
 import Control.Monad.Reader.Class
+import Control.Monad.Reader (runReaderT, ReaderT)
 import Control.Monad.Error.Class
+import Control.Monad.Except (runExceptT, ExceptT)
 import Control.Monad.Writer.Class
 import Control.Monad.Writer (execWriterT, WriterT)
 import Control.Monad.Trans.Class (lift)
 
+import qualified Data.Map as Map
+import qualified Data.Assoc
+
 import HeapGuard.RegionInferenceResult
 import HeapGuard.Region
+import HeapGuard.NakedPointerError
 
 import qualified Language.C.Analysis.SemRep as C
 import qualified Language.C.Data.Ident as C
 import qualified Language.C.Data.Node as C
 
-import qualified Language.C.Data.Error as CErr
-
+import qualified Language.C.Analysis.TravMonad as CM
 
 class Monad m => RegionResultMonad m where
   rrStructTagRegion :: StructTagRef -> m RegionScheme
@@ -26,12 +32,42 @@ instance (Monoid w, RegionResultMonad m) => RegionResultMonad (WriterT w m) wher
   rrStructTagRegion = lift . rrStructTagRegion
   rrLookupTypedef = lift . rrLookupTypedef
 
+instance RegionResultMonad m => RegionResultMonad (ReaderT r m) where
+  rrStructTagRegion = lift . rrStructTagRegion
+  rrLookupTypedef = lift . rrLookupTypedef
+
+instance RegionResultMonad m => RegionResultMonad (ExceptT e m) where
+  rrStructTagRegion = lift . rrStructTagRegion
+  rrLookupTypedef = lift . rrLookupTypedef
+
+newtype InferenceResultT m a = InferenceResultT { unInferenceResultT :: ReaderT (Map.Map C.Ident C.TypeDef, RegionInferenceResult) m a }
+  deriving (Functor, Applicative, Monad)
+
+instance CM.MonadCError m => CM.MonadCError (InferenceResultT m) where
+  throwTravError = InferenceResultT . lift . CM.throwTravError
+  catchTravError = error "finish catchTravError for InferenceResultT" -- FIXME: finish me
+  recordError = InferenceResultT . lift . CM.recordError
+  getErrors = InferenceResultT $ lift $ CM.getErrors
+  
+
+instance Monad m => RegionResultMonad (InferenceResultT m) where
+  rrStructTagRegion sr = InferenceResultT $ asks (certain . Map.lookup sr . Data.Assoc.getAssocMap . snd)
+    where
+      certain Nothing = error "cannot get Nothing from rrStructTagRegion"
+      certain (Just a) = a
+  rrLookupTypedef ident = InferenceResultT $ asks (certain . Map.lookup ident . fst)
+    where
+      certain Nothing = error "cannot get Nothing  from rrLookupTypedef"
+      certain (Just a) = a
+
+runInferenceResultT :: Monad m => InferenceResultT m a -> Map.Map C.Ident C.TypeDef -> RegionInferenceResult -> m a
+runInferenceResultT comp = curry (runReaderT (unInferenceResultT comp))
+
 class HasRegionScheme t where
   getRegionScheme :: RegionResultMonad m => t -> m RegionScheme
 
 instance HasRegionScheme StructTagRef where
   getRegionScheme = rrStructTagRegion
-
 
 instance HasRegionScheme C.CompTypeRef where
   getRegionScheme ctr =
@@ -101,41 +137,33 @@ instance PointerRegionScheme C.TypeDef where
 declPtrRegion :: (RegionResultMonad m, C.Declaration d) => d -> m (Maybe RegionScheme)
 declPtrRegion = pointerRegionScheme . C.declType
 
-    
--- a naked pointer to the managed heap in a function declaration. NodeInfo for the return value, or zero or more arguments.
-data NakedPointerError = NakedPointerError !C.NodeInfo ![NPEPosn] !CErr.ErrorLevel
-  deriving Show
-
--- trace of an error position
-data NPEPosn = NPEArg !Int !NPEPosn -- function argument j
-  | NPERet !NPEPosn -- function return value
-  | NPEDecl -- a declaration (this is always the end of the error position)
-  | NPETypeDefRef !C.NodeInfo !NPEPosn -- a typedef occurrence
-  | NPETypeDefDef !C.NodeInfo !NPEPosn -- the typedef declaration
-  deriving Show
-
-nakedPtrCheckIdentDecl :: (RegionResultMonad m, MonadReader NPEPosn m,
-                            MonadError NakedPointerError m) => C.IdentDecl -> m ()
-nakedPtrCheckIdentDecl idcl =
+nakedPtrCheckDecl :: (RegionResultMonad m,
+                            MonadError NakedPointerError m, C.Declaration d, C.CNode d) => d -> m ()
+nakedPtrCheckDecl dcl =
   do
-    npes <- execWriterT $ local (const $ NPEDecl) $ go (C.declType idcl)
+    npes <- execWriterT $ flip runReaderT (NPEDecl $ C.declName dcl) $ go (C.declType dcl)
     case npes of
       [] -> return ()
-      _ ->  throwError $ NakedPointerError (C.nodeInfo idcl) npes CErr.LevelError
+      _ ->  throwError $ mkNakedPointerError (C.nodeInfo dcl) npes
   where
-    go ty =
-      case ty of
+    go :: (RegionResultMonad m, MonadReader NPEPosn m, MonadWriter NPEVictims m) => C.Type -> m ()
+    go ty_ =
+      case ty_ of
         C.DirectType {} -> return ()
         C.PtrType ty _qs _attrs -> go ty
         C.ArrayType ty _sz _qs _attrs -> go ty
         C.TypeDefType tdr _qs _attrs -> goTypeDefRef tdr
         C.FunctionType fty _attrs -> checkFunty fty
+    goTypeDefRef :: (RegionResultMonad m, MonadReader NPEPosn m, MonadWriter NPEVictims m)
+                 => C.TypeDefRef -> m ()
     goTypeDefRef tdr =
       case tdr of
         C.TypeDefRef _ (Just ty) ni ->
           local (NPETypeDefRef ni) $ go ty
         C.TypeDefRef ident Nothing ni ->
           local (NPETypeDefRef ni) (rrLookupTypedef ident >>= goTypeDef)
+    goTypeDef :: (RegionResultMonad m, MonadReader NPEPosn m, MonadWriter NPEVictims m)
+              => C.TypeDef -> m ()
     goTypeDef td =
       case td of
         C.TypeDef _ident ty _attrs ni ->
@@ -159,14 +187,27 @@ nakedPtrCheckIdentDecl idcl =
           local NPERet $ do
             x <- pointerRegionScheme retty
             case x of
-              Just rs | isManagedRegion rs -> tellNPE
+              Just rs | isManagedRegion rs -> tellNPE retty
               _ -> return ()
-          local NPERet $ go retty -- if return is a function, check its args too
+            -- if return is a function, check its args too
+            go retty
           forM_ (zip params [0..]) $ \(param, j) -> do
-            local (NPEArg j) $ do
+            let ctx = NPEArg j (C.declName param) (C.nodeInfo param)
+            local ctx $ do
+              -- first check if the arg is a ptr to managed
               x <- declPtrRegion param
               case x of
-                Just rs | isManagedRegion rs -> tellNPE
+                Just rs | isManagedRegion rs -> tellNPE (C.declType param)
                 _ -> return ()
-            local (NPEArg j) $ go (C.declType param) -- if ar is a function, check its args
-    tellNPE = ask >>= \npe -> tell [npe]
+               -- then if arg is a function type, check its args
+              go (C.declType param)
+    tellNPE ty = ask >>= \npe -> tell [NPEVictim ty npe]
+
+analyze :: (RegionResultMonad m, CM.MonadCError m) => Map.Map C.Ident C.IdentDecl -> m ()
+analyze m = do
+  let (m', _) = C.splitIdentDecls True m
+  forM_ m' $ \decl -> do
+    ans <- runExceptT (nakedPtrCheckDecl decl)
+    case ans of
+      Left err -> CM.recordError err
+      Right () -> return ()

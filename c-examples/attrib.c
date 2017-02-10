@@ -27,3 +27,8 @@ struct W {
 struct __attribute__((__region(2))) H {
 	X x;
 };
+
+typedef X *XP;
+
+int foo (XP x);
+

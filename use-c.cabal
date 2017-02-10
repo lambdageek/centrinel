@@ -27,6 +27,7 @@ library
                        HeapGuard.Region,
                        HeapGuard.PrettyPrint,
                        Control.Unification.IntVar.Extras,
+                       HeapGuard.RegionResultMonad,
                        HeapGuard.NakedPointer,
                        HeapGuard.NakedPointerError,
                        Data.Assoc

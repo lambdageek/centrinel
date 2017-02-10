@@ -22,6 +22,7 @@ import qualified HeapGuard.RegionInference as HG
 import HeapGuard.RegionInferenceResult
 
 import qualified HeapGuard.NakedPointer as NP
+import qualified HeapGuard.RegionResultMonad as NP
 
 inp :: FilePath -> IO (Either ParseError CTranslUnit)
 inp fp = parseCFile (newGCC "gcc") Nothing [] fp

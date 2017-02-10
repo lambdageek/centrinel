@@ -1,18 +1,16 @@
 {-# language GeneralizedNewtypeDeriving #-}
-module HeapGuard.NakedPointer (analyze, runInferenceResultT, InferenceResultT) where
+module HeapGuard.NakedPointer (analyze) where
 
 import Control.Monad (forM_)
 
 import Control.Monad.Reader.Class
-import Control.Monad.Reader (runReaderT, ReaderT)
+import Control.Monad.Reader (runReaderT)
 import Control.Monad.Error.Class
-import Control.Monad.Except (runExceptT, ExceptT)
+import Control.Monad.Except (runExceptT)
 import Control.Monad.Writer.Class
-import Control.Monad.Writer (execWriterT, WriterT)
-import Control.Monad.Trans.Class (lift)
+import Control.Monad.Writer (execWriterT)
 
 import qualified Data.Map as Map
-import qualified Data.Assoc
 
 import HeapGuard.RegionInferenceResult
 import HeapGuard.Region
@@ -24,44 +22,7 @@ import qualified Language.C.Data.Node as C
 
 import qualified Language.C.Analysis.TravMonad as CM
 
-class Monad m => RegionResultMonad m where
-  rrStructTagRegion :: StructTagRef -> m RegionScheme
-  rrLookupTypedef :: C.Ident -> m C.TypeDef
-
-instance (Monoid w, RegionResultMonad m) => RegionResultMonad (WriterT w m) where
-  rrStructTagRegion = lift . rrStructTagRegion
-  rrLookupTypedef = lift . rrLookupTypedef
-
-instance RegionResultMonad m => RegionResultMonad (ReaderT r m) where
-  rrStructTagRegion = lift . rrStructTagRegion
-  rrLookupTypedef = lift . rrLookupTypedef
-
-instance RegionResultMonad m => RegionResultMonad (ExceptT e m) where
-  rrStructTagRegion = lift . rrStructTagRegion
-  rrLookupTypedef = lift . rrLookupTypedef
-
-newtype InferenceResultT m a = InferenceResultT { unInferenceResultT :: ReaderT (Map.Map C.Ident C.TypeDef, RegionInferenceResult) m a }
-  deriving (Functor, Applicative, Monad)
-
-instance CM.MonadCError m => CM.MonadCError (InferenceResultT m) where
-  throwTravError = InferenceResultT . lift . CM.throwTravError
-  catchTravError = error "finish catchTravError for InferenceResultT" -- FIXME: finish me
-  recordError = InferenceResultT . lift . CM.recordError
-  getErrors = InferenceResultT $ lift $ CM.getErrors
-  
-
-instance Monad m => RegionResultMonad (InferenceResultT m) where
-  rrStructTagRegion sr = InferenceResultT $ asks (certain . Map.lookup sr . Data.Assoc.getAssocMap . snd)
-    where
-      certain Nothing = error "cannot get Nothing from rrStructTagRegion"
-      certain (Just a) = a
-  rrLookupTypedef ident = InferenceResultT $ asks (certain . Map.lookup ident . fst)
-    where
-      certain Nothing = error "cannot get Nothing  from rrLookupTypedef"
-      certain (Just a) = a
-
-runInferenceResultT :: Monad m => InferenceResultT m a -> Map.Map C.Ident C.TypeDef -> RegionInferenceResult -> m a
-runInferenceResultT comp = curry (runReaderT (unInferenceResultT comp))
+import HeapGuard.RegionResultMonad
 
 class HasRegionScheme t where
   getRegionScheme :: RegionResultMonad m => t -> m RegionScheme
@@ -137,41 +98,38 @@ instance PointerRegionScheme C.TypeDef where
 declPtrRegion :: (RegionResultMonad m, C.Declaration d) => d -> m (Maybe RegionScheme)
 declPtrRegion = pointerRegionScheme . C.declType
 
-nakedPtrCheckDecl :: (RegionResultMonad m,
-                            MonadError NakedPointerError m, C.Declaration d, C.CNode d) => d -> m ()
-nakedPtrCheckDecl dcl =
-  do
-    npes <- execWriterT $ flip runReaderT (NPEDecl $ C.declName dcl) $ go (C.declType dcl)
-    case npes of
-      [] -> return ()
-      _ ->  throwError $ mkNakedPointerError (C.nodeInfo dcl) npes
-  where
-    go :: (RegionResultMonad m, MonadReader NPEPosn m, MonadWriter NPEVictims m) => C.Type -> m ()
-    go ty_ =
-      case ty_ of
-        C.DirectType {} -> return ()
-        C.PtrType ty _qs _attrs -> go ty
-        C.ArrayType ty _sz _qs _attrs -> go ty
-        C.TypeDefType tdr _qs _attrs -> goTypeDefRef tdr
-        C.FunctionType fty _attrs -> checkFunty fty
-    goTypeDefRef :: (RegionResultMonad m, MonadReader NPEPosn m, MonadWriter NPEVictims m)
-                 => C.TypeDefRef -> m ()
-    goTypeDefRef tdr =
-      case tdr of
-        -- always lookup the typedef even if the type is available - it makes the
-        -- victim look nicer.  also if we start avoiding revisiting the same
-        -- typedef, this will save us a type traversal.
-        --
-        -- C.TypeDefRef _ (Just ty) ni ->
-        --  local (NPETypeDefRef ni) $ go ty
-        C.TypeDefRef ident _ {-Nothing-} ni ->
-          local (NPETypeDefRef ni) (rrLookupTypedef ident >>= goTypeDef)
-    goTypeDef :: (RegionResultMonad m, MonadReader NPEPosn m, MonadWriter NPEVictims m)
-              => C.TypeDef -> m ()
-    goTypeDef td =
-      case td of
-        C.TypeDef _ident ty _attrs ni ->
-          local (NPETypeDefDef ni) (go ty)
+class NakedPointerSummary a where
+  nakedPointers :: (RegionResultMonad m, MonadReader NPEPosn m, MonadWriter NPEVictims m) => a -> m ()
+
+instance NakedPointerSummary C.Type where
+  nakedPointers ty_ =
+    case ty_ of
+      C.DirectType {} -> return ()
+      C.PtrType ty _qs _attrs -> nakedPointers ty
+      C.ArrayType ty _sz _qs _attrs -> nakedPointers ty
+      C.TypeDefType tdr _qs _attrs -> nakedPointers tdr
+      C.FunctionType fty _attrs -> nakedPointers fty
+
+instance NakedPointerSummary C.TypeDefRef where
+  nakedPointers tdr =
+    case tdr of
+      -- always lookup the typedef even if the type is available - it makes the
+      -- victim look nicer.  also if we start avoiding revisiting the same
+      -- typedef, this will save us a type traversal.
+      --
+      -- C.TypeDefRef _ (Just ty) ni ->
+      --  local (NPETypeDefRef ni) $ nakedPointers ty
+      C.TypeDefRef ident _ {-Nothing-} ni ->
+        local (NPETypeDefRef ni) (rrLookupTypedef ident >>= nakedPointers)
+
+instance NakedPointerSummary C.TypeDef where
+  nakedPointers td =
+    case td of
+      C.TypeDef _ident ty _attrs ni ->
+        local (NPETypeDefDef ni) (nakedPointers ty)
+
+instance NakedPointerSummary C.FunType where
+  nakedPointers fty =
     -- for every type comprising a function type, we do two things:
     -- 1. if it's a pointer, make sure it doesn't point into the managed region;
     -- 2. if it's a function type, recursively check that that function doesn't
@@ -182,19 +140,24 @@ nakedPtrCheckDecl dcl =
     --
     -- TODO: this does mean we potentially revisit the same typedef many times.
     -- Maybe use a visited set?
-    checkFunty fty =
-      case fty of
-        C.FunTypeIncomplete {} ->
-          -- analysis is after typechecking, all params seen already.
-          error "unexpected FunTypeIncomplete in nakedPtrCheckIdentDecl"
-        C.FunType retty params _variadic -> do
+    case fty of
+      C.FunTypeIncomplete {} ->
+        -- analysis is after typechecking, all params seen already.
+        --
+        -- FIXME: There's one place where these can still happen.  If a
+        -- function is declared without a definition as "int foo ();" then
+        -- GlobalDecls still has it as a FunTypeIncomplete
+        --
+        -- (as expected, "int foo (void);" will be a FunType with no arguments)
+        error "unexpected FunTypeIncomplete in nakedPtrCheckIdentDecl"
+      C.FunType retty params _variadic -> do
           local NPERet $ do
             x <- pointerRegionScheme retty
             case x of
               Just rs | isManagedRegion rs -> tellNPE retty
               _ -> return ()
             -- if return is a function, check its args too
-            go retty
+            nakedPointers retty
           forM_ (zip params [0..]) $ \(param, j) -> do
             let ctx = NPEArg j (C.declName param) (C.nodeInfo param)
             local ctx $ do
@@ -204,8 +167,19 @@ nakedPtrCheckDecl dcl =
                 Just rs | isManagedRegion rs -> tellNPE (C.declType param)
                 _ -> return ()
                -- then if arg is a function type, check its args
-              go (C.declType param)
-    tellNPE ty = ask >>= \npe -> tell [NPEVictim ty npe]
+              nakedPointers (C.declType param)
+
+tellNPE :: (MonadReader NPEPosn m, MonadWriter NPEVictims m) => C.Type -> m ()
+tellNPE ty = ask >>= \npe -> tell [NPEVictim ty npe]
+
+nakedPtrCheckDecl :: (RegionResultMonad m,
+                            MonadError NakedPointerError m, C.Declaration d, C.CNode d) => d -> m ()
+nakedPtrCheckDecl dcl =
+  do
+    npes <- execWriterT $ flip runReaderT (NPEDecl $ C.declName dcl) $ nakedPointers (C.declType dcl)
+    case npes of
+      [] -> return ()
+      _ ->  throwError $ mkNakedPointerError (C.nodeInfo dcl) npes
 
 analyze :: (RegionResultMonad m, CM.MonadCError m) => Map.Map C.Ident C.IdentDecl -> m ()
 analyze m = do

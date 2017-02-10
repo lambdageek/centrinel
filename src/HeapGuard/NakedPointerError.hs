@@ -31,7 +31,7 @@ instance Show NPEVictim where
 instance PP.Pretty NPEPosn where
   pretty p0 = PP.vcat $ case p0 of
     NPEDecl ident -> [PP.text "in function declaration" <+> PP.quotes (PP.pretty ident)]
-    NPEArg j ident ni p -> [PP.text "in argument" <+> PP.quotes (PP.pretty ident) <+> PP.int j
+    NPEArg j ident ni p -> [PP.text "in" <+> prettyOrdinal j <+> PP.text "argument" <+> PP.quotes (PP.pretty ident)
                              <+> PP.text "at" <+> textPos ni, PP.pretty p]
     NPERet p -> [PP.text "in return type", PP.pretty p]
     NPETypeDefRef ni p -> [PP.text "at" <+> textPos ni, PP.pretty p]
@@ -43,6 +43,17 @@ instance PP.Pretty NPEPosn where
       showPos p | C.isSourcePos p = (C.posFile p) ++ ":" ++ show (C.posRow p) ++ ": " ++
                                   "(column " ++ show (C.posColumn p) ++ ") "
                 | otherwise = show p ++ ":: "
+
+prettyOrdinal :: Integral n => n -> PP.Doc
+prettyOrdinal n = PP.integer (toInteger n) PP.<> suf
+  where
+    r = n `mod` 10
+    suf = case r of
+            1 | h /= 11 -> PP.text "st"
+            2 | h /= 12 -> PP.text "nd"
+            3 | h /= 13 -> PP.text "rd"
+            _ -> PP.text "th"
+    h = n `mod` 100
 
 -- trace of an error position
 data NPEPosn = NPEArg !Int !C.VarName !C.NodeInfo !NPEPosn -- function argument j
@@ -58,5 +69,5 @@ instance Err.Error NakedPointerError where
   errorInfo (NakedPointerError ni victims lvl) = Err.mkErrorInfo lvl msg ni
     where
       msg = PP.render $ PP.vcat (msghead : map PP.pretty victims)
-      msghead = PP.text "Naked pointer(s) to managed object(s) found in declaration(s)"
+      msghead = PP.text "Naked pointer(s) to managed object(s) found in declaration"
   changeErrorLevel (NakedPointerError ni victims _lvl) lvl = NakedPointerError ni victims lvl

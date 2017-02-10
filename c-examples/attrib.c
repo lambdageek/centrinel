@@ -30,5 +30,10 @@ struct __attribute__((__region(2))) H {
 
 typedef X *XP;
 
+typedef int (*callback)(XP x);
+
 int foo (XP x);
 
+struct Y* bar (int j, XP x);
+
+int baz (callback f);

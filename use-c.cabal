@@ -38,7 +38,8 @@ library
                        HeapGuard.RegionResultMonad,
                        HeapGuard.NakedPointer,
                        HeapGuard.NakedPointerError,
-                       Data.Assoc
+                       Data.Assoc,
+                       HeapGuard.Main
   -- other-modules:       
   -- other-extensions:    
   build-depends:       base >=4.9 && <4.10,
@@ -54,6 +55,12 @@ library
   default-extensions:  FlexibleContexts, FlexibleInstances,
                        MultiParamTypeClasses
   default-language:    Haskell2010
+
+executable heapguard
+  hs-source-dirs:      main
+  build-depends:       base,
+                       use-c
+  main-is:             Main.hs
 
 source-repository head
   type:                git

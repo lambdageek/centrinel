@@ -1,4 +1,4 @@
-#include <stdio.h>
+#include <string.h>
 
 int foo (char *x)
 {

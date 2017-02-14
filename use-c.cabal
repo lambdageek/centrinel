@@ -58,9 +58,11 @@ library
 
 executable heapguard
   hs-source-dirs:      main
+  main-is:             Main.hs
   build-depends:       base,
                        use-c
-  main-is:             Main.hs
+  default-language:    Haskell2010
+  ghc-options:         -Wall
 
 source-repository head
   type:                git

@@ -31,10 +31,10 @@ This is an early development prototype, so the setup is a bit involved.
 You will need a recent GHC (tested with GHC 8.0.x, but 7.10.x will probably
 work too, and possibly 7.8 with minor patching).
 
-Dependencies: *master* branch of [language-c](https://github.com/visq/language-c)
+Dependencies: *next* branch of [my fork of language-c](https://github.com/lambdageek/language-c) ([upstream](https://github.com/visq/language-c))
 
 ```bash
-git clone https://github.com/lambdageek/language-c.git
+git clone https://github.com/lambdageek/language-c.git -b next
 git clone https://github.com/lambdageek/use-c.git
 cd use-c
 cabal sandbox init
@@ -50,11 +50,10 @@ You should now be able to play around with it using `cabal repl`
 
 ## Usage ##
 
-In a GHCi repl:
+There is a barebones executable `heapguard` usage is `heapguard PATH-TO-C-FILE`:
 
 ```
-*HeapGuard> Right ast <- inp "c-examples/attrib.c"
-*HeapGuard> think' ast
+$ cabal run heapguard -- c-examples/attrib.c
 Errors:
 c-examples/attrib.c:28: (column 2) [WARNING]  >>> Region mismatch: Region 1 and Region 2
   Additional locations:

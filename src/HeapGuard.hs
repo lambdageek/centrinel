@@ -25,7 +25,10 @@ import qualified HeapGuard.NakedPointer as NP
 import qualified HeapGuard.RegionResultMonad as NP
 
 inp :: FilePath -> IO (Either ParseError CTranslUnit)
-inp fp = parseCFile (newGCC "gcc") Nothing [] fp
+inp fp = parseCFile (newGCC "gcc") Nothing preprocessorCmdLine fp
+  where
+    preprocessorCmdLine :: [String]
+    preprocessorCmdLine = ["-U__BLOCKS__"]
 
 p :: CTranslUnit -> IO ()
 p = print . P.prettyUsingInclude 

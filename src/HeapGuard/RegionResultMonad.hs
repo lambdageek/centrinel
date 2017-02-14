@@ -53,7 +53,7 @@ instance CM.MonadCError m => CM.MonadCError (InferenceResultT m) where
 instance Monad m => RegionResultMonad (InferenceResultT m) where
   rrStructTagRegion sr = InferenceResultT $ asks (certain . Map.lookup sr . Data.Assoc.getAssocMap . snd)
     where
-      certain Nothing = error "cannot get Nothing from rrStructTagRegion"
+      certain Nothing = PolyRS
       certain (Just a) = a
   rrLookupTypedef ident = InferenceResultT $ asks (certain . Map.lookup ident . fst)
     where

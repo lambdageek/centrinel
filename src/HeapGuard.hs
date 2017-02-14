@@ -25,10 +25,25 @@ import qualified HeapGuard.NakedPointer as NP
 import qualified HeapGuard.RegionResultMonad as NP
 
 inp :: FilePath -> IO (Either ParseError CTranslUnit)
-inp fp = parseCFile (newGCC "gcc") Nothing preprocessorCmdLine fp
+inp fp = parseCFile (newGCC "cc") Nothing preprocessorCmdLine fp
   where
     preprocessorCmdLine :: [String]
     preprocessorCmdLine = ["-U__BLOCKS__"]
+      ++ [ "-DHAVE_CONFIG_H"
+         , "-I."
+         , "-I../.."
+         , "-I../.."
+         , "-I../../mono"
+         , "-I../../libgc/include"
+         , "-I../../eglib/src"
+         , "-I../../eglib/src"
+         , "-D_THREAD_SAFE"
+         , "-DGC_MACOSX_THREADS"
+         , "-DPLATFORM_MACOSX"
+         , "-DUSE_MMAP"
+         , "-DUSE_MUNMAP"
+         , "-DMONO_DLL_EXPORT"
+         ]
 
 p :: CTranslUnit -> IO ()
 p = print . P.prettyUsingInclude 

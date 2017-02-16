@@ -4,7 +4,7 @@ import Control.Monad (void)
 import System.Exit (exitFailure)
 import System.Environment (getArgs, getProgName)
 
-import HeapGuard (inp, think')
+import HeapGuard (inp, think', makeNakedPointerOpts)
 
 main :: IO ()
 main = do
@@ -16,7 +16,8 @@ main = do
         print err
         exitFailure
       Right ast -> return ast
-  void $ think' ast
+  let opts = makeNakedPointerOpts fp
+  void $ think' opts ast
       
 processArgs :: IO FilePath
 processArgs = do

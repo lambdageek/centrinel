@@ -1,5 +1,5 @@
 {-# language GeneralizedNewtypeDeriving #-}
-module HeapGuard.NakedPointer (analyze) where
+module HeapGuard.NakedPointer (analyze, AnalysisOpts(..)) where
 
 import Control.Monad (forM_)
 
@@ -19,6 +19,7 @@ import HeapGuard.NakedPointerError
 import qualified Language.C.Analysis.SemRep as C
 import qualified Language.C.Data.Ident as C
 import qualified Language.C.Data.Node as C
+import qualified Language.C.Data.Position as C
 
 import qualified Language.C.Analysis.TravMonad as CM
 
@@ -181,11 +182,28 @@ nakedPtrCheckDecl dcl =
       [] -> return ()
       _ ->  throwError $ mkNakedPointerError (C.nodeInfo dcl) npes
 
-analyze :: (RegionResultMonad m, CM.MonadCError m) => Map.Map C.Ident C.IdentDecl -> m ()
-analyze m = do
+analyze :: (RegionResultMonad m, CM.MonadCError m) => AnalysisOpts -> Map.Map C.Ident C.IdentDecl -> m ()
+analyze opts m = do
   let (m', _) = C.splitIdentDecls True m
-  forM_ m' $ \decl -> do
+  forM_ (optFilterDecls opts m') $ \decl -> do
     ans <- runExceptT (nakedPtrCheckDecl decl)
     case ans of
       Left err -> CM.recordError err
       Right () -> return ()
+
+-- | Options guiding the naked pointer analysis
+data AnalysisOpts =
+  AnalysisOpts
+  { analysisOptFilterPath :: Maybe FilePath -- ^ @Just fp@ if we should only
+                                            -- consider declarations from the
+                                            -- given path, otherwise consider
+                                            -- every declaration.
+  }
+
+optFilterDecls :: AnalysisOpts -> Map.Map C.Ident a -> Map.Map C.Ident a
+optFilterDecls opts =
+  case analysisOptFilterPath opts of
+    Just fp -> Map.filterWithKey $ \k _v ->
+      let pos = C.posOf k
+      in C.isSourcePos pos && fp == C.posFile pos
+    Nothing -> id

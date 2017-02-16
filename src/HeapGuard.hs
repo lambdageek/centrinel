@@ -1,6 +1,6 @@
 module HeapGuard where
 
-import Control.Monad (unless)
+import Control.Monad (unless, when)
 
 import Language.C (parseCFile)
 import Language.C.Parser (ParseError)
@@ -24,11 +24,16 @@ import HeapGuard.RegionInferenceResult
 import qualified HeapGuard.NakedPointer as NP
 import qualified HeapGuard.RegionResultMonad as NP
 
+
+
+makeNakedPointerOpts :: FilePath -> NP.AnalysisOpts
+makeNakedPointerOpts fp = NP.AnalysisOpts {NP.analysisOptFilterPath = Just fp }
+
 inp :: FilePath -> IO (Either ParseError CTranslUnit)
 inp fp = parseCFile (newGCC "cc") Nothing preprocessorCmdLine fp
   where
     preprocessorCmdLine :: [String]
-    preprocessorCmdLine = ["-U__BLOCKS__"]
+    preprocessorCmdLine = ["-D__HEAPGUARD__", "-U__BLOCKS__"]
       ++ [ "-DHAVE_CONFIG_H"
          , "-I."
          , "-I../.."
@@ -66,16 +71,18 @@ inferRegions u = do
     nonFatal :: A.MonadCError m => m () -> m ()
     nonFatal comp = A.catchTravError comp (\e -> A.recordError $ changeErrorLevel e LevelWarn)
 
-think' :: CTranslUnit -> IO (A.GlobalDecls, RegionInferenceResult)
-think' u = do
+think' :: NP.AnalysisOpts -> CTranslUnit -> IO (A.GlobalDecls, RegionInferenceResult)
+think' npOpts u = do
   let work = do
         grir@(g,rir) <- inferRegions u
-        NP.runInferenceResultT (NP.analyze $ A.gObjs g) (A.gTypeDefs g) rir
+        NP.runInferenceResultT (NP.analyze npOpts $ A.gObjs g) (A.gTypeDefs g) rir
         return grir
   case HG.evalHGTrav work of
     Left errs -> do
       putStrLn "Errors:"
       mapM_ print errs
+      let n = length errs
+      when (n > 20) $ putStrLn ("There were " ++ show n ++ " errors")
       return $ error "no global decls"
     Right (grir, warns) -> do
       unless (null warns) $ do

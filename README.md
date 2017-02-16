@@ -31,10 +31,10 @@ This is an early development prototype, so the setup is a bit involved.
 You will need a recent GHC (tested with GHC 8.0.x, but 7.10.x will probably
 work too, and possibly 7.8 with minor patching).
 
-Dependencies: *next* branch of [my fork of language-c](https://github.com/lambdageek/language-c) ([upstream](https://github.com/visq/language-c))
+Dependencies: a work-in-progress branch of [my fork of language-c](https://github.com/lambdageek/language-c) ([upstream](https://github.com/visq/language-c))
 
 ```bash
-git clone https://github.com/lambdageek/language-c.git -b next
+git clone https://github.com/lambdageek/language-c.git -b hack-it-until-it-works
 git clone https://github.com/lambdageek/use-c.git
 cd use-c
 cabal sandbox init

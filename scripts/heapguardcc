@@ -12,7 +12,7 @@
 # If make invokes the compiler to do linking, heapguard will note that no
 # source files are specified and will return with exit code 0.
 
-set -x
+# set -x
 
 if [ "z$REAL_CC" = "z" ]; then
     CC=cc

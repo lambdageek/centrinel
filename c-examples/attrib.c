@@ -1,6 +1,4 @@
 
-#define MANAGED_HEAP 1
-
 typedef struct X X;
 
 /* managed heap, derived from member */
@@ -10,7 +8,7 @@ struct Y {
 
 typedef struct Y Y;
 
-struct __attribute__((__region(MANAGED_HEAP))) X {
+struct __HEAPGUARD_MANAGED_ATTR X {
 	int a;
 };
 

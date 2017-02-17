@@ -25,7 +25,7 @@ import HeapGuard.RegionInferenceResult
 import qualified HeapGuard.NakedPointer as NP
 import qualified HeapGuard.RegionResultMonad as NP
 
-
+import qualified HeapGuard.Util.Datafiles as HGData
 
 makeNakedPointerOpts :: FilePath -> NP.AnalysisOpts
 makeNakedPointerOpts fp = NP.AnalysisOpts {NP.analysisOptFilterPath = Just fp }
@@ -54,19 +54,21 @@ inp fp = parseCFile (newGCC "cc") cpp_args
          , "-DMONO_DLL_EXPORT"
          ]
 
--- | Add @'CPP.Undefine' "__BLOCKS__"@ and remove any 'CPP.outputFile' options.
-addHeapguardAndCleanupUnsavoryArgs :: CPP.CppArgs -> CPP.CppArgs
-addHeapguardAndCleanupUnsavoryArgs cppArgs =
-    cppArgs { CPP.cppOptions = CPP.cppOptions cppArgs ++ [ CPP.Define "__HEAPGUARD__" ""
-                                                         , CPP.Undefine "__BLOCKS__" ]
-            , CPP.outputFile = Nothing
-            }
+-- | Remove any 'CPP.outputFile' options, and add
+-- preprocessor defines and definitions for Heapguard to successfully parse and
+-- analize the specified input file.
+cppArgsForHeapGuard :: CPP.CppArgs -> HGData.Datafiles -> CPP.CppArgs
+cppArgsForHeapGuard cppArgs datafiles =
+  let heapguardHeader = HGData.datafileHeapguardHeader datafiles
+  in cppArgs
+     { CPP.cppOptions = CPP.cppOptions cppArgs ++ [ CPP.IncludeFile heapguardHeader ]
+     , CPP.outputFile = Nothing
+     }
 
 parseCFile :: CPP.Preprocessor cpp => cpp -> CPP.CppArgs -> IO (Either ParseError CTranslUnit)
 {-# specialize parseCFile :: GCC -> CPP.CppArgs -> IO (Either ParseError CTranslUnit) #-}
-parseCFile cpp cppArgs_ =
+parseCFile cpp cppArgs =
   do
-    let cppArgs = addHeapguardAndCleanupUnsavoryArgs cppArgs_
     inputStream <- CPP.runPreprocessor cpp cppArgs >>= handleCppError
     return $ parseC inputStream $ initPos $ CPP.inputFile cppArgs
   where

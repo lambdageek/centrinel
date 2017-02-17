@@ -20,6 +20,7 @@ extra-source-files:  ChangeLog.md,
                      README.md,
                      c-examples/*.c
                      scripts/heapguardcc
+data-files:          include/heapguard.h
 cabal-version:       >=1.10
 
 library
@@ -42,7 +43,9 @@ library
                        Data.Assoc,
                        HeapGuard.Main,
                        HeapGuard.System.RunLikeCC
-  other-modules:       HeapGuard.Debug.PrettyCppArgs
+  other-modules:       HeapGuard.Debug.PrettyCppArgs,
+                       HeapGuard.Util.Datafiles,
+                       Paths_use_c
   -- other-extensions:    
   build-depends:       base >=4.9 && <4.10,
                        containers >= 0.5.7.1,

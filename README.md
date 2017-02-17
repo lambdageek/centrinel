@@ -44,7 +44,12 @@ cabal install alex
 cabal install --dependencies-only
 cabal configure
 cabal build
+cabal install     # needed to get include/heapguard.h in the right place
 ```
+
+The last step copies the heapguard
+header [include/heapguard.h](include/heapguard.h) to the right place (in the
+sandbox) so that heapguard can find it.
 
 You should now be able to play around with it using `cabal repl`
 
@@ -98,7 +103,7 @@ if compilation succeeds, it will invoke `heapguard` (which must be on the path)
 These steps are not automated yet
 
 ```
-cabal build
+cabal install
 cp dist/build/heapguard/heapguard [somewhere on your PATH]
 cp scripts/heapguardcc [somewhere on your PATH]
 ```

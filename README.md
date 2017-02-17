@@ -50,7 +50,10 @@ You should now be able to play around with it using `cabal repl`
 
 ## Usage ##
 
-There is a barebones executable `heapguard` usage is `heapguard PATH-TO-C-FILE`:
+### Just run the binary on a C file ###
+
+There is a barebones executable `heapguard` usage is `heapguard [cc-opts] PATH-TO-C-FILE`. It understands a modicum of
+`cc` command line options such as `-D` and `-I` and `-U`.
 
 ```
 $ cabal run heapguard -- c-examples/attrib.c
@@ -83,6 +86,30 @@ c-examples/attrib.c:39: (column 5) [ERROR]  >>> Naked pointer(s) to managed obje
           in function declaration 'baz'
 
 ```
+
+### Replace `CC` in a make ###
+
+The file [`scripts/heapguardcc`](scripts/heapguardcc) can be used as the value of the `CC` variable for `make`.
+It will first run the real compiler (specified by the `REAL_CC` environment variable, or `cc` if unset) and
+if compilation succeeds, it will invoke `heapguard` (which must be on the path)
+
+#### Setup ####
+
+These steps are not automated yet
+
+```
+cabal build
+cp dist/build/heapguard/heapguard [somewhere on your PATH]
+cp scripts/heapguardcc [somewhere on your PATH]
+```
+
+#### Example ####
+
+```
+$ export REAL_CC=/path/to/your/cc # if unset, defaults to 'cc'
+$ make CC=heapguardcc
+```
+
 
 ## What works ##
 

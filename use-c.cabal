@@ -19,6 +19,7 @@ build-type:          Simple
 extra-source-files:  ChangeLog.md,
                      README.md,
                      c-examples/*.c
+                     scripts/heapguardcc
 cabal-version:       >=1.10
 
 library
@@ -39,8 +40,9 @@ library
                        HeapGuard.NakedPointer,
                        HeapGuard.NakedPointerError,
                        Data.Assoc,
-                       HeapGuard.Main
-  -- other-modules:       
+                       HeapGuard.Main,
+                       HeapGuard.System.RunLikeCC
+  other-modules:       HeapGuard.Debug.PrettyCppArgs
   -- other-extensions:    
   build-depends:       base >=4.9 && <4.10,
                        containers >= 0.5.7.1,

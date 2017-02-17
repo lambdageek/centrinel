@@ -2,14 +2,15 @@ module HeapGuard where
 
 import Control.Monad (unless, when)
 
-import Language.C (parseCFile)
-import Language.C.Parser (ParseError)
+import Language.C.Parser (ParseError, parseC)
 
 import Language.C.Syntax.AST (CTranslUnit)
 
-import Language.C.System.GCC (newGCC)
-
 import Language.C.Data.Error (changeErrorLevel, ErrorLevel(LevelWarn))
+import Language.C.Data.Position (initPos)
+
+import Language.C.System.GCC (newGCC, GCC)
+import qualified Language.C.System.Preprocess as CPP
 
 import qualified Language.C.Analysis.AstAnalysis as A
 import qualified Language.C.Analysis.SemRep as A
@@ -29,12 +30,15 @@ import qualified HeapGuard.RegionResultMonad as NP
 makeNakedPointerOpts :: FilePath -> NP.AnalysisOpts
 makeNakedPointerOpts fp = NP.AnalysisOpts {NP.analysisOptFilterPath = Just fp }
 
+-- | Don't use this
 inp :: FilePath -> IO (Either ParseError CTranslUnit)
-inp fp = parseCFile (newGCC "cc") Nothing preprocessorCmdLine fp
+inp fp = parseCFile (newGCC "cc") cpp_args
   where
+    cpp_args = (CPP.rawCppArgs preprocessorCmdLine fp) { CPP.cppTmpDir = Nothing }
+
+    -- blatantly stolen from an autoconf run for playing around with ghci
     preprocessorCmdLine :: [String]
-    preprocessorCmdLine = ["-D__HEAPGUARD__", "-U__BLOCKS__"]
-      ++ [ "-DHAVE_CONFIG_H"
+    preprocessorCmdLine = [ "-DHAVE_CONFIG_H"
          , "-I."
          , "-I../.."
          , "-I../.."
@@ -49,6 +53,25 @@ inp fp = parseCFile (newGCC "cc") Nothing preprocessorCmdLine fp
          , "-DUSE_MUNMAP"
          , "-DMONO_DLL_EXPORT"
          ]
+
+-- | Add @'CPP.Undefine' "__BLOCKS__"@ and remove any 'CPP.outputFile' options.
+addHeapguardAndCleanupUnsavoryArgs :: CPP.CppArgs -> CPP.CppArgs
+addHeapguardAndCleanupUnsavoryArgs cppArgs =
+    cppArgs { CPP.cppOptions = CPP.cppOptions cppArgs ++ [ CPP.Define "__HEAPGUARD__" ""
+                                                         , CPP.Undefine "__BLOCKS__" ]
+            , CPP.outputFile = Nothing
+            }
+
+parseCFile :: CPP.Preprocessor cpp => cpp -> CPP.CppArgs -> IO (Either ParseError CTranslUnit)
+{-# specialize parseCFile :: GCC -> CPP.CppArgs -> IO (Either ParseError CTranslUnit) #-}
+parseCFile cpp cppArgs_ =
+  do
+    let cppArgs = addHeapguardAndCleanupUnsavoryArgs cppArgs_
+    inputStream <- CPP.runPreprocessor cpp cppArgs >>= handleCppError
+    return $ parseC inputStream $ initPos $ CPP.inputFile cppArgs
+  where
+    handleCppError (Left exitCode) = fail $ "Preprocessor failed with " ++ show exitCode
+    handleCppError (Right ok)      = return ok
 
 p :: CTranslUnit -> IO ()
 p = print . P.prettyUsingInclude 

@@ -78,14 +78,10 @@ deriveRegionFromTypeName (A.TyComp (A.CompTypeRef sueref A.StructTag _ni)) = Jus
 deriveRegionFromTypeName _ = return Nothing
 
 deriveRegionFromTypeDefRef :: (RegionAssignment RegionIdent v m, RegionUnification v m) => A.TypeDefRef -> m (Maybe v)
-deriveRegionFromTypeDefRef (A.TypeDefRef ident Nothing _ni) = Just <$> lookupTypedefRegion ident
-deriveRegionFromTypeDefRef (A.TypeDefRef _ (Just t) _ni) = deriveRegionFromType t
+deriveRegionFromTypeDefRef (A.TypeDefRef _ t _ni) = deriveRegionFromType t
 
 deriveRegionFromSUERef :: (RegionAssignment RegionIdent v m, RegionUnification v m) => Id.SUERef -> m v
 deriveRegionFromSUERef suref = assignRegion (StructTagId suref)
-
-lookupTypedefRegion :: (RegionAssignment RegionIdent v m, RegionUnification v m) => Id.Ident -> m v
-lookupTypedefRegion ident = assignRegion (TypedefId ident)
 
 -- Apply the current unification bindings to a given struct definition and return the inferred region.
 applyBindingTagDef :: (ApplyUnificationState m, RegionAssignment RegionIdent RegionVar m) => A.TagDef -> m RegionScheme

@@ -51,8 +51,7 @@ instance HasRegionScheme C.TypeName where
 instance HasRegionScheme C.TypeDefRef where
   getRegionScheme tdr =
     case tdr of
-      C.TypeDefRef _ident (Just ty) _ni -> getRegionScheme ty
-      C.TypeDefRef ident Nothing _ni -> rrLookupTypedef ident >>= getRegionScheme
+      C.TypeDefRef _ident ty _ni -> getRegionScheme ty
 
 instance HasRegionScheme C.TypeDef where
   getRegionScheme td =
@@ -86,8 +85,7 @@ instance PointerRegionScheme C.Type where
 instance PointerRegionScheme C.TypeDefRef where
   pointerRegionScheme tdr =
     case tdr of
-      C.TypeDefRef _ident (Just ty) _ni -> pointerRegionScheme ty
-      C.TypeDefRef ident Nothing _ni -> rrLookupTypedef ident >>= pointerRegionScheme
+      C.TypeDefRef _ident ty _ni -> pointerRegionScheme ty
 
 instance PointerRegionScheme C.TypeDef where
   pointerRegionScheme td =

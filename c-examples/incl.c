@@ -1,6 +1,7 @@
-#define _DARWIN_FEATURE_CLOCK_GETTIME 0
 #include <string.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <time.h>
 
 int foo (char *x)

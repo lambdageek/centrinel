@@ -31,14 +31,16 @@ This is an early development prototype, so the setup is a bit involved.
 You will need a recent GHC (tested with GHC 8.0.x, but 7.10.x will probably
 work too, and possibly 7.8 with minor patching).
 
-Dependencies: a work-in-progress branch of [my fork of language-c](https://github.com/lambdageek/language-c) ([upstream](https://github.com/visq/language-c))
+Dependencies: This program uses the `language-c` library for C parsing - you
+will need the `alex` lexer and `happy` parser installed (either systemwide or
+in the sandbox for this repository).  The steps below setup a sandbox and
+install the needed programs into it. (You don't need `alex` and `happy` to run
+the analysis, just to build the analyzer binary.)
 
 ```bash
-git clone https://github.com/lambdageek/language-c.git -b next
 git clone https://github.com/lambdageek/use-c.git
 cd use-c
 cabal sandbox init
-cabal sandbox add-source ../language-c
 cabal install happy
 cabal install alex
 cabal install --dependencies-only
@@ -47,18 +49,33 @@ cabal build
 cabal install     # needed to get include/heapguard.h in the right place
 ```
 
-The last step copies the heapguard
+### The `include/heapguard.h` header ###
+
+The last step of the installation instructions, above, copies the heapguard
 header [include/heapguard.h](include/heapguard.h) to the right place (in the
 sandbox) so that heapguard can find it.
 
-You should now be able to play around with it using `cabal repl`
+This header defines `__HEAPGUARD__` to `1` to indicate that heapguard is
+running; `__HEAPGUARD_MANAGED_ATTR` attribute and `__HEAPGUARD_MANAGED_REGION`
+attribute specifier that you can use to annotate your structs, as well as
+macros to define away certain GCC primitives that are not understood by
+`language-c`.
+
+The header is automatically included by heapguard, you don't have to include it explicitly.
 
 ## Usage ##
 
+You should now be able to play around with it using `cabal run heapguard --
+[ARGS]` (or `cabal repl` if you want to run the various steps separately).
+Additionally, there is a script `heapguardcc` which can be used as `CC` in
+`make` invocations as a drop-in replacement for `gcc` or `clang`.
+
 ### Just run the binary on a C file ###
 
-There is a barebones executable `heapguard` usage is `heapguard [cc-opts] PATH-TO-C-FILE`. It understands a modicum of
-`cc` command line options such as `-D` and `-I` and `-U`.
+Usage: `heapguard [cc-opts] C-FILE`
+
+The program understands a modicum of `cc` command line options (and will
+silently drop others that it doesn't know) such as `-D` and `-I` and `-U`.
 
 ```
 $ cabal run heapguard -- c-examples/attrib.c
@@ -123,12 +140,13 @@ $ make CC=heapguardcc
   inferred for the first member of the struct (provided it's another struct
   type) and conflicts will be reported.
 
-* Pointers to structs **in region 1** will elicit an error if they occur
+* Pointers to structs **in region `__HEAPGUARD_MANAGED_REGION`** (defined as
+  `__region(1)` in `include/heapguard.h`) will elicit an error if they occur
   anywhere in a function prototype (either a declaration or a definition).
 
 ## What's planned ##
 
-* Checking of function bodies for use of region 1 pointers.
+* Checking of function bodies for use of `__HEAPGUARD_MANAGED_REGION` pointers.
 
 * A way of annotating blessed functions/structs that are allowed to manipulate
   pointers to the managed heap without an error.

@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <time.h>
+#include <signal.h>
 
 int foo (char *x)
 {

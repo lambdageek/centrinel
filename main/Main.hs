@@ -1,6 +1,6 @@
 module Main where
 
-import qualified HeapGuard.Main
+import qualified Centrinel.Main
 
 main :: IO ()
-main = HeapGuard.Main.main
+main = Centrinel.Main.main

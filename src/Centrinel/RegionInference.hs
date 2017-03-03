@@ -1,7 +1,7 @@
 -- | Analyze a parsed C file and create region unification constraints
 --
 {-# LANGUAGE FunctionalDependencies #-}
-module HeapGuard.RegionInference (inferDeclEvent, hasRegionAttr, applyBindingTagDef, justStructTagDefs) where
+module Centrinel.RegionInference (inferDeclEvent, hasRegionAttr, applyBindingTagDef, justStructTagDefs) where
 
 import qualified Data.Map
 import Data.Monoid (First(..))
@@ -20,10 +20,10 @@ import qualified Language.C.Analysis.SemRep as A
 
 import Language.C.Analysis.Debug () -- P.Pretty instances 
 
-import HeapGuard.Region
-import HeapGuard.RegionUnification
-import HeapGuard.RegionUnification.Term (regionUnifyVar, RegionVar)
-import HeapGuard.RegionIdent
+import Centrinel.Region
+import Centrinel.RegionUnification
+import Centrinel.RegionUnification.Term (regionUnifyVar, RegionVar)
+import Centrinel.RegionIdent
 
 inferDeclEvent :: (RegionAssignment RegionIdent v m, RegionUnification v m, AM.MonadTrav m) => A.DeclEvent -> m ()
 inferDeclEvent e =

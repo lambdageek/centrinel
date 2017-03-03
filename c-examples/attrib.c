@@ -8,7 +8,7 @@ struct Y {
 
 typedef struct Y Y;
 
-struct __HEAPGUARD_MANAGED_ATTR X {
+struct __CENTRINEL_MANAGED_ATTR X {
 	int a;
 };
 

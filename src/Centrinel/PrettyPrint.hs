@@ -1,4 +1,4 @@
-module HeapGuard.PrettyPrint (
+module Centrinel.PrettyPrint (
   -- * Pretty printing typeclass
   Pretty (..)
   -- * Specialized pretty printing for C ASTs

@@ -1,13 +1,13 @@
 {-# language NamedFieldPuns #-}
 -- | Pretty print 'Language.C.System.Preprocess.CppArgs'
-module HeapGuard.Debug.PrettyCppArgs
+module Centrinel.Debug.PrettyCppArgs
   ( showCppArgs
   , prettyCppArgs
   ) where
 
 import Language.C.System.Preprocess (CppArgs(..), CppOption (..))
 
-import qualified HeapGuard.PrettyPrint as PP
+import qualified Centrinel.PrettyPrint as PP
 
 showCppArgs :: CppArgs -> String
 showCppArgs = PP.render . prettyCppArgs

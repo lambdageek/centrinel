@@ -1,5 +1,5 @@
 {-# language GeneralizedNewtypeDeriving #-}
-module HeapGuard.RegionUnification.Loc where
+module Centrinel.RegionUnification.Loc where
 
 import Data.Monoid (Monoid(..))
 

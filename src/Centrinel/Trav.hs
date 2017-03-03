@@ -1,4 +1,4 @@
--- | HeapGuard C language traversal monad
+-- | Centrinel C language traversal monad
 --
 -- The @HGTrav@ monad stack has:
 -- 1. a collection of analysis hooks that are triggered by traversals of C ASTs,
@@ -6,7 +6,7 @@
 --
 --
 {-# language GeneralizedNewtypeDeriving #-}
-module HeapGuard.Trav (
+module Centrinel.Trav (
   HGTrav
   , runHGTrav
   , evalHGTrav
@@ -28,10 +28,10 @@ import Language.C.Data.Error (CError)
 import Language.C.Analysis.SemRep (DeclEvent)
 import qualified Language.C.Analysis.TravMonad as AM
 
-import qualified HeapGuard.RegionIdent as HGId
-import qualified HeapGuard.RegionUnification as U
-import qualified HeapGuard.RegionUnification.Term as U
-import HeapGuard.Warning (hgWarn)
+import qualified Centrinel.RegionIdent as HGId
+import qualified Centrinel.RegionUnification as U
+import qualified Centrinel.RegionUnification.Term as U
+import Centrinel.Warning (hgWarn)
 
 type HGAnalysis s = DeclEvent -> HGTrav s ()
 

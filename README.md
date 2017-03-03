@@ -1,4 +1,4 @@
-# HeapGuard #
+# Centrinel #
 
 Restrict some C structs to reside in specific regions of the heap.
 
@@ -46,39 +46,39 @@ cabal install alex
 cabal install --dependencies-only
 cabal configure
 cabal build
-cabal install     # needed to get include/heapguard.h in the right place
+cabal install     # needed to get include/centrinel.h in the right place
 ```
 
-### The `include/heapguard.h` header ###
+### The `include/centrinel.h` header ###
 
-The last step of the installation instructions, above, copies the heapguard
-header [include/heapguard.h](include/heapguard.h) to the right place (in the
-sandbox) so that heapguard can find it.
+The last step of the installation instructions, above, copies the centrinel
+header [include/centrinel.h](include/centrinel.h) to the right place (in the
+sandbox) so that centrinel can find it.
 
-This header defines `__HEAPGUARD__` to `1` to indicate that heapguard is
-running; `__HEAPGUARD_MANAGED_ATTR` attribute and `__HEAPGUARD_MANAGED_REGION`
+This header defines `__CENTRINEL__` to `1` to indicate that centrinel is
+running; `__CENTRINEL_MANAGED_ATTR` attribute and `__CENTRINEL_MANAGED_REGION`
 attribute specifier that you can use to annotate your structs, as well as
 macros to define away certain GCC primitives that are not understood by
 `language-c`.
 
-The header is automatically included by heapguard, you don't have to include it explicitly.
+The header is automatically included by centrinel, you don't have to include it explicitly.
 
 ## Usage ##
 
-You should now be able to play around with it using `cabal run heapguard --
+You should now be able to play around with it using `cabal run centrinel --
 [ARGS]` (or `cabal repl` if you want to run the various steps separately).
-Additionally, there is a script `heapguardcc` which can be used as `CC` in
+Additionally, there is a script `centrinelcc` which can be used as `CC` in
 `make` invocations as a drop-in replacement for `gcc` or `clang`.
 
 ### Just run the binary on a C file ###
 
-Usage: `heapguard [cc-opts] C-FILE`
+Usage: `centrinel [cc-opts] C-FILE`
 
 The program understands a modicum of `cc` command line options (and will
 silently drop others that it doesn't know) such as `-D` and `-I` and `-U`.
 
 ```
-$ cabal run heapguard -- c-examples/attrib.c
+$ cabal run centrinel -- c-examples/attrib.c
 Errors:
 c-examples/attrib.c:28: (column 2) [WARNING]  >>> Region mismatch: Region 1 and Region 2
   Additional locations:
@@ -111,9 +111,9 @@ c-examples/attrib.c:39: (column 5) [ERROR]  >>> Naked pointer(s) to managed obje
 
 ### Replace `CC` in a make ###
 
-The file [`scripts/heapguardcc`](scripts/heapguardcc) can be used as the value of the `CC` variable for `make`.
+The file [`scripts/centrinelcc`](scripts/centrinelcc) can be used as the value of the `CC` variable for `make`.
 It will first run the real compiler (specified by the `REAL_CC` environment variable, or `cc` if unset) and
-if compilation succeeds, it will invoke `heapguard` (which must be on the path)
+if compilation succeeds, it will invoke `centrinel` (which must be on the path)
 
 #### Setup ####
 
@@ -121,15 +121,15 @@ These steps are not automated yet
 
 ```
 cabal install
-cp dist/build/heapguard/heapguard [somewhere on your PATH]
-cp scripts/heapguardcc [somewhere on your PATH]
+cp dist/build/centrinel/centrinel [somewhere on your PATH]
+cp scripts/centrinelcc [somewhere on your PATH]
 ```
 
 #### Example ####
 
 ```
 $ export REAL_CC=/path/to/your/cc # if unset, defaults to 'cc'
-$ make CC=heapguardcc
+$ make CC=centrinelcc
 ```
 
 
@@ -140,13 +140,13 @@ $ make CC=heapguardcc
   inferred for the first member of the struct (provided it's another struct
   type) and conflicts will be reported.
 
-* Pointers to structs **in region `__HEAPGUARD_MANAGED_REGION`** (defined as
-  `__region(1)` in `include/heapguard.h`) will elicit an error if they occur
+* Pointers to structs **in region `__CENTRINEL_MANAGED_REGION`** (defined as
+  `__region(1)` in `include/centrinel.h`) will elicit an error if they occur
   anywhere in a function prototype (either a declaration or a definition).
 
 ## What's planned ##
 
-* Checking of function bodies for use of `__HEAPGUARD_MANAGED_REGION` pointers.
+* Checking of function bodies for use of `__CENTRINEL_MANAGED_REGION` pointers.
 
 * A way of annotating blessed functions/structs that are allowed to manipulate
   pointers to the managed heap without an error.

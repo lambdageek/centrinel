@@ -1,14 +1,14 @@
-module HeapGuard.RegionInferenceResult where
+module Centrinel.RegionInferenceResult where
 
 import qualified Data.Map as Map
 
 import Language.C.Data.Ident (SUERef)
 import qualified Data.Assoc
 
-import qualified HeapGuard.PrettyPrint as PP
-import HeapGuard.PrettyPrint ((<+>))
+import qualified Centrinel.PrettyPrint as PP
+import Centrinel.PrettyPrint ((<+>))
 
-import HeapGuard.Region (RegionScheme)
+import Centrinel.Region (RegionScheme)
 
 -- | @struct T@ reference - the name @T@ in the struct/union/enum tag namespace, but only when it's a struct.
 -- we're not interested in unions or enums.

@@ -1,4 +1,4 @@
-module HeapGuard.RegionMismatchError (RegionMismatchError) where
+module Centrinel.RegionMismatchError (RegionMismatchError) where
 
 import Data.Monoid ((<>))
 
@@ -7,11 +7,11 @@ import qualified Control.Unification.Types as U
 import Language.C.Data.Error as Err
 import Language.C.Data.Node (NodeInfo)
 
-import qualified HeapGuard.PrettyPrint as PP
-import HeapGuard.PrettyPrint ((<+>))
-import HeapGuard.Region
-import HeapGuard.RegionUnification.Term
-import HeapGuard.RegionUnification.Loc
+import qualified Centrinel.PrettyPrint as PP
+import Centrinel.PrettyPrint ((<+>))
+import Centrinel.Region
+import Centrinel.RegionUnification.Term
+import Centrinel.RegionUnification.Loc
 
 data RegionMismatchError = RegionMismatchError !RegionVictim !RegionVictim !Err.ErrorLevel
 

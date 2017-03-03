@@ -1,5 +1,5 @@
 -- | Parse command line arguments like the given preprocessor
-module HeapGuard.System.RunLikeCC (
+module Centrinel.System.RunLikeCC (
   -- * Command line parsing
   runLikeCC
   -- * Utilities
@@ -20,7 +20,7 @@ import System.Exit (exitSuccess, exitFailure)
 import Language.C.System.Preprocess (Preprocessor(..), CppArgs)
 import Language.C.System.GCC (GCC, newGCC)
 
-import HeapGuard.Debug.PrettyCppArgs (showCppArgs)
+import Centrinel.Debug.PrettyCppArgs (showCppArgs)
 
 -- | @runLikeCC progName gcc args@ parses the command line arguments like the
 -- given preprocessor.

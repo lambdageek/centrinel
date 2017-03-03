@@ -1,4 +1,4 @@
-module HeapGuard.Warning where
+module Centrinel.Warning where
 
 import Language.C.Data.Error as Err
 import Language.C.Data.Node (NodeInfo, undefNode)

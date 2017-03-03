@@ -1,15 +1,15 @@
 #! /usr/bin/env bash
-# Put this script, along with heapguard on your path, then pass it to make:
+# Put this script, along with centrinel on your path, then pass it to make:
 #
-# $ make CC=heapguardcc
+# $ make CC=centrinelcc
 #
 # Use REAL_CC to specify the real compiler. If unset, cc from the path will be
 # invoked.
 #
 # The script first runs the real compiler and if returns with exit code 0, runs
-# heapguard.
+# centrinel.
 #
-# If make invokes the compiler to do linking, heapguard will note that no
+# If make invokes the compiler to do linking, centrinel will note that no
 # source files are specified and will return with exit code 0.
 
 # set -x
@@ -18,4 +18,4 @@ if [ "z$REAL_CC" = "z" ]; then
     CC=cc
 fi
 
-($CC "$@") && exec heapguard "$@"
+($CC "$@") && exec centrinel "$@"

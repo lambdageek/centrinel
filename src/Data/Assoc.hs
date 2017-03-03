@@ -5,7 +5,7 @@ module Data.Assoc where
 
 import qualified Data.Map as Map
 
-import qualified HeapGuard.PrettyPrint as PP
+import qualified Centrinel.PrettyPrint as PP
 import qualified Language.C.Analysis.Debug as DP  
 
 newtype Assoc k a = Assoc { getAssocMap :: Map.Map k a }

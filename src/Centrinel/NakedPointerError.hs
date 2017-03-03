@@ -1,11 +1,11 @@
-module HeapGuard.NakedPointerError where
+module Centrinel.NakedPointerError where
 
 import qualified Language.C.Data.Node as C
 import qualified Language.C.Analysis.SemRep as C
 import qualified Language.C.Data.Error as Err
     
-import qualified HeapGuard.PrettyPrint as PP
-import HeapGuard.PrettyPrint ((<+>))
+import qualified Centrinel.PrettyPrint as PP
+import Centrinel.PrettyPrint ((<+>))
 
 import Language.C.Analysis.Debug () -- instance PP.Pretty Type
 

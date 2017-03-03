@@ -1,6 +1,6 @@
 -- | Monad transformer that provides a view of the region unification results
 {-# language GeneralizedNewtypeDeriving #-}
-module HeapGuard.RegionResultMonad (
+module Centrinel.RegionResultMonad (
   -- * RegionResultMonad type class
   RegionResultMonad(..)
   -- * InferenceResultT monad transformer
@@ -21,8 +21,8 @@ import qualified Language.C.Analysis.TravMonad as CM
 
 import Data.Assoc
 
-import HeapGuard.Region
-import HeapGuard.RegionInferenceResult
+import Centrinel.Region
+import Centrinel.RegionInferenceResult
 
 class Monad m => RegionResultMonad m where
   rrStructTagRegion :: StructTagRef -> m RegionScheme

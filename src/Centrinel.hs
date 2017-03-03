@@ -1,4 +1,4 @@
-module HeapGuard where
+module Centrinel where
 
 import Control.Monad (unless, when)
 
@@ -16,16 +16,16 @@ import qualified Language.C.Analysis.AstAnalysis as A
 import qualified Language.C.Analysis.SemRep as A
 import qualified Language.C.Analysis.TravMonad as A
 
-import qualified HeapGuard.PrettyPrint as P
+import qualified Centrinel.PrettyPrint as P
 
-import qualified HeapGuard.Trav as HG
-import qualified HeapGuard.RegionInference as HG
-import HeapGuard.RegionInferenceResult
+import qualified Centrinel.Trav as HG
+import qualified Centrinel.RegionInference as HG
+import Centrinel.RegionInferenceResult
 
-import qualified HeapGuard.NakedPointer as NP
-import qualified HeapGuard.RegionResultMonad as NP
+import qualified Centrinel.NakedPointer as NP
+import qualified Centrinel.RegionResultMonad as NP
 
-import qualified HeapGuard.Util.Datafiles as HGData
+import qualified Centrinel.Util.Datafiles as HGData
 
 makeNakedPointerOpts :: FilePath -> NP.AnalysisOpts
 makeNakedPointerOpts fp = NP.AnalysisOpts {NP.analysisOptFilterPath = Just fp }
@@ -55,13 +55,13 @@ inp fp = parseCFile (newGCC "cc") cpp_args
          ]
 
 -- | Remove any 'CPP.outputFile' options, and add
--- preprocessor defines and definitions for Heapguard to successfully parse and
+-- preprocessor defines and definitions for Centrinel to successfully parse and
 -- analize the specified input file.
-cppArgsForHeapGuard :: CPP.CppArgs -> HGData.Datafiles -> CPP.CppArgs
-cppArgsForHeapGuard cppArgs datafiles =
-  let heapguardHeader = HGData.datafileHeapguardHeader datafiles
+cppArgsForCentrinel :: CPP.CppArgs -> HGData.Datafiles -> CPP.CppArgs
+cppArgsForCentrinel cppArgs datafiles =
+  let centrinelHeader = HGData.datafileCentrinelHeader datafiles
   in cppArgs
-     { CPP.cppOptions = CPP.cppOptions cppArgs ++ [ CPP.IncludeFile heapguardHeader ]
+     { CPP.cppOptions = CPP.cppOptions cppArgs ++ [ CPP.IncludeFile centrinelHeader ]
      , CPP.outputFile = Nothing
      }
 

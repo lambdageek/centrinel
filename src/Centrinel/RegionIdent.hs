@@ -1,5 +1,5 @@
 {-# language FunctionalDependencies #-}
-module HeapGuard.RegionIdent where
+module Centrinel.RegionIdent where
 
 import qualified Language.C.Data.Ident as Id
 

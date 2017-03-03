@@ -1,4 +1,4 @@
-module HeapGuard.RegionUnification.Term where
+module Centrinel.RegionUnification.Term where
 
 import Data.Functor.Contravariant (Contravariant (..))
 import Data.Monoid ((<>), Monoid(..))
@@ -9,9 +9,9 @@ import qualified Control.Unification.IntVar as U
 
 import qualified Language.C.Data.Node as C
 
-import HeapGuard.Region (Region)
+import Centrinel.Region (Region)
 
-import HeapGuard.RegionUnification.Loc
+import Centrinel.RegionUnification.Loc
 
 
 newtype RegionVar = RegionVar { unRegionVar :: U.IntVar }

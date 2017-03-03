@@ -1,5 +1,5 @@
 {-# language GeneralizedNewtypeDeriving #-}
-module HeapGuard.NakedPointer (analyze, AnalysisOpts(..)) where
+module Centrinel.NakedPointer (analyze, AnalysisOpts(..)) where
 
 import Control.Monad (forM_)
 
@@ -12,9 +12,9 @@ import Control.Monad.Writer (execWriterT)
 
 import qualified Data.Map as Map
 
-import HeapGuard.RegionInferenceResult
-import HeapGuard.Region
-import HeapGuard.NakedPointerError
+import Centrinel.RegionInferenceResult
+import Centrinel.Region
+import Centrinel.NakedPointerError
 
 import qualified Language.C.Analysis.SemRep as C
 import qualified Language.C.Data.Ident as C
@@ -23,7 +23,7 @@ import qualified Language.C.Data.Position as C
 
 import qualified Language.C.Analysis.TravMonad as CM
 
-import HeapGuard.RegionResultMonad
+import Centrinel.RegionResultMonad
 
 class HasRegionScheme t where
   getRegionScheme :: RegionResultMonad m => t -> m RegionScheme

@@ -1,6 +1,6 @@
 -- | Region unification monad and term structure
 {-# language RankNTypes, FunctionalDependencies, GeneralizedNewtypeDeriving #-}
-module HeapGuard.RegionUnification where
+module Centrinel.RegionUnification where
 
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.Except
@@ -13,9 +13,9 @@ import qualified Control.Unification.IntVar.Extras as ExtraU
 import qualified Language.C.Data.Node as C
 import qualified Language.C.Analysis.TravMonad as C
 
-import HeapGuard.Region (Region, RegionScheme(..))
-import HeapGuard.RegionUnification.Term
-import HeapGuard.RegionMismatchError (RegionMismatchError)
+import Centrinel.Region (Region, RegionScheme(..))
+import Centrinel.RegionUnification.Term
+import Centrinel.RegionMismatchError (RegionMismatchError)
  
 class Monad m => RegionUnification v m | m -> v where
   newRegion :: m v

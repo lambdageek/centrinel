@@ -1,7 +1,7 @@
-module HeapGuard.Region where
+module Centrinel.Region where
 
-import qualified HeapGuard.PrettyPrint as PP
-import HeapGuard.PrettyPrint ((<+>))
+import qualified Centrinel.PrettyPrint as PP
+import Centrinel.PrettyPrint ((<+>))
 
 -- A literal region attribute __region (n) that requires a struct to be located
 -- in region n.

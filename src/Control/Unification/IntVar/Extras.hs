@@ -17,7 +17,7 @@ liftCatch catch comp handler = do
   St.put final
   return ans
   where
-    guardedComp :: Monad m => IntBindingState tm -> IntBindingT tm m a -> m (a, IntBindingState tm)
+    guardedComp :: IntBindingState tm -> IntBindingT tm m a -> m (a, IntBindingState tm)
     guardedComp s m = runIntBindingT (runWithState s m) `catch` (runIntBindingT . runWithState s . handler)
     
   

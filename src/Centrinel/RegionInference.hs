@@ -15,7 +15,6 @@ import qualified Language.C.Syntax.AST as Syn
 import qualified Language.C.Syntax.Constants as Syn
 
 -- semantics
-import qualified Language.C.Analysis.TravMonad as AM
 import qualified Language.C.Analysis.SemRep as A
 
 import Language.C.Analysis.Debug () -- P.Pretty instances 
@@ -25,7 +24,7 @@ import Centrinel.RegionUnification
 import Centrinel.RegionUnification.Term (regionUnifyVar, RegionVar)
 import Centrinel.RegionIdent
 
-inferDeclEvent :: (RegionAssignment RegionIdent v m, RegionUnification v m, AM.MonadTrav m) => A.DeclEvent -> m ()
+inferDeclEvent :: (RegionAssignment RegionIdent v m, RegionUnification v m) => A.DeclEvent -> m ()
 inferDeclEvent e =
   case e of
     A.TagEvent (A.CompDef structTy@(A.CompType suref A.StructTag _ attrs ni)) -> do
@@ -73,14 +72,14 @@ deriveRegionFromType (A.DirectType t _qs _attrs) = deriveRegionFromTypeName t
 deriveRegionFromType (A.TypeDefType td _qs _attrs) = deriveRegionFromTypeDefRef td
 deriveRegionFromType _ = return Nothing
 
-deriveRegionFromTypeName :: (RegionAssignment RegionIdent v m, RegionUnification v m) => A.TypeName -> m (Maybe v)
+deriveRegionFromTypeName :: (RegionAssignment RegionIdent v m) => A.TypeName -> m (Maybe v)
 deriveRegionFromTypeName (A.TyComp (A.CompTypeRef sueref A.StructTag _ni)) = Just <$> deriveRegionFromSUERef sueref
 deriveRegionFromTypeName _ = return Nothing
 
 deriveRegionFromTypeDefRef :: (RegionAssignment RegionIdent v m, RegionUnification v m) => A.TypeDefRef -> m (Maybe v)
 deriveRegionFromTypeDefRef (A.TypeDefRef _ t _ni) = deriveRegionFromType t
 
-deriveRegionFromSUERef :: (RegionAssignment RegionIdent v m, RegionUnification v m) => Id.SUERef -> m v
+deriveRegionFromSUERef :: (RegionAssignment RegionIdent v m) => Id.SUERef -> m v
 deriveRegionFromSUERef suref = assignRegion (StructTagId suref)
 
 -- Apply the current unification bindings to a given struct definition and return the inferred region.
@@ -91,7 +90,7 @@ applyBindingTagDef (A.CompDef (A.CompType sueref A.StructTag _members _attrs _ni
   return $ extractRegionScheme m
 applyBindingTagDef _ = return PolyRS
 
-justStructTagDefs :: Ord k => Data.Map.Map k A.TagDef -> Data.Map.Map k A.TagDef
+justStructTagDefs :: Data.Map.Map k A.TagDef -> Data.Map.Map k A.TagDef
 justStructTagDefs = Data.Map.filter isStruct
   where
     isStruct (A.CompDef (A.CompType _sueref A.StructTag _membs _attrs _ni)) = True

@@ -63,5 +63,5 @@ instance Monad m => RegionResultMonad (InferenceResultT m) where
 instance MonadTrans InferenceResultT where
   lift = InferenceResultT . lift
 
-runInferenceResultT :: Monad m => InferenceResultT m a -> Map.Map C.Ident C.TypeDef -> RegionInferenceResult -> m a
+runInferenceResultT :: InferenceResultT m a -> Map.Map C.Ident C.TypeDef -> RegionInferenceResult -> m a
 runInferenceResultT comp = curry (runReaderT (unInferenceResultT comp))

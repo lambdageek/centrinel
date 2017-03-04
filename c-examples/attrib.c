@@ -8,6 +8,10 @@ struct Y {
 
 typedef struct Y Y;
 
+#ifndef __CENTRINEL_MANAGED_ATTR
+#define __CENTRINEL_MANAGED_ATTR __attribute__((__region(1)))
+#endif
+
 struct __CENTRINEL_MANAGED_ATTR X {
 	int a;
 };

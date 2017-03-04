@@ -17,6 +17,7 @@ module Centrinel.Trav (
 
 import Control.Monad.Trans.Class 
 import Control.Monad.Trans.Reader (ReaderT)
+import Control.Monad.Except (ExceptT (..))
 import qualified Control.Monad.Trans.Reader as Reader
 import Control.Monad.Trans.State.Lazy (StateT)
 import qualified Control.Monad.Trans.State.Lazy as State
@@ -98,16 +99,26 @@ withHGAnalysis az =
     -- new analysis runs last
     addAnalysis m = (>> m)
 
-runHGTrav :: HGTrav () a
-          -> Either [CError] ((a, RegionIdentMap), [CError])
--- runHGTrav :: HGAnalysis () -> HGTrav () a -> Either [CError] (a, [CError])
-runHGTrav (HGTrav comp) = AM.runTrav_ (U.runUnifyRegT (State.runStateT (Reader.runReaderT comp az) Map.empty))
+runHGTrav :: Monad m
+          => HGTrav () a
+          -> ExceptT [CError] m ((a, RegionIdentMap), [CError])
+runHGTrav = helper State.runStateT
+
+evalHGTrav :: Monad m
+           => HGTrav () a
+          -> ExceptT [CError] m (a, [CError])
+evalHGTrav = helper State.evalStateT
+
+helper :: Monad m
+       => (StateT RegionIdentMap (U.UnifyRegT (AM.Trav t)) a
+           -> Map.Map k b
+           -> U.UnifyRegT (AM.Trav ()) r)
+       -> HGTrav t a
+       -> ExceptT [CError] m (r, [CError])
+helper destructState (HGTrav comp) =
+  ExceptT $ return $ AM.runTrav_ $ U.runUnifyRegT (destructState (Reader.runReaderT comp az) Map.empty)
   where
     az = const (return ())
 
-evalHGTrav :: HGTrav () a
-          -> Either [CError] (a, [CError])
-evalHGTrav (HGTrav comp) = AM.runTrav_ (U.runUnifyRegT (State.evalStateT (Reader.runReaderT comp az) Map.empty))
-  where
-    az = const (return ())
+
 

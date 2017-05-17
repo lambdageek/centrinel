@@ -1,15 +1,18 @@
+-- | Analyze function signatures to identify naked pointers into the
+-- managed heap.
 {-# language GeneralizedNewtypeDeriving #-}
 module Centrinel.NakedPointer (analyze, AnalysisOpts(..)) where
 
-import Control.Monad (forM_)
+import Control.Monad (forM_, (<=<))
 
 import Control.Monad.Reader.Class
 import Control.Monad.Reader (runReaderT)
-import Control.Monad.Error.Class
-import Control.Monad.Except (runExceptT)
 import Control.Monad.Writer.Class
 import Control.Monad.Writer (execWriterT)
+import Control.Monad.State.Class
+import Control.Monad.State.Strict (StateT, evalStateT)
 
+import Data.Foldable (traverse_)
 import qualified Data.Map as Map
 
 import Centrinel.RegionInferenceResult
@@ -21,11 +24,13 @@ import qualified Language.C.Data.Ident as C
 import qualified Language.C.Data.Node as C
 import qualified Language.C.Data.Position as C
 
+import qualified Language.C.Analysis.DefTable as CDT
 import qualified Language.C.Analysis.TravMonad as CM
 
 import Centrinel.RegionResultMonad
 
 class HasRegionScheme t where
+  -- | Get the 'RegionScheme' for the given type
   getRegionScheme :: RegionResultMonad m => t -> m RegionScheme
 
 instance HasRegionScheme StructTagRef where
@@ -168,26 +173,61 @@ instance NakedPointerSummary C.FunType where
                -- then if arg is a function type, check its args
               nakedPointers (C.declType param)
 
+instance NakedPointerSummary C.FunDef where
+  nakedPointers (C.FunDef _decl _stmt _ni) = do
+    let symtab = (undefined :: CDT.DefTable) -- TODO: need to get my hands on a symtab.  possibly i need to be called back from the main analysis?
+    evalLocalSymtabT symtab $ inFunctionScope $ return () -- FIXME: finish me and get rid of the undefined DefTable
+
+-- TODO: move this to a separate file
+newtype LocalSymtabT m a = LocalSymtabT { unLocalSymtabT :: StateT CDT.DefTable m a }
+  deriving (Functor, Applicative, Monad)
+
+instance Monad m => CM.MonadSymtab (LocalSymtabT m) where
+  getDefTable = LocalSymtabT get
+  withDefTable f = LocalSymtabT $ do
+    x <- get
+    let ~(a, y) = f x
+    put y
+    return a
+
+evalLocalSymtabT :: Monad m => CDT.DefTable -> LocalSymtabT m a -> m a
+evalLocalSymtabT st0 comp = evalStateT (unLocalSymtabT comp) st0
+
+-- TODO: move this to a separate file
+inFunctionScope :: CM.MonadSymtab m => m a -> m a
+inFunctionScope comp = do
+  CM.enterFunctionScope
+  x <- comp
+  CM.leaveFunctionScope
+  return x
+  
+
 tellNPE :: (MonadReader NPEPosn m, MonadWriter NPEVictims m) => C.Type -> m ()
 tellNPE ty = ask >>= \npe -> tell [NPEVictim ty npe]
 
-nakedPtrCheckDecl :: (RegionResultMonad m,
-                            MonadError NakedPointerError m, C.Declaration d, C.CNode d) => d -> m ()
-nakedPtrCheckDecl dcl =
-  do
-    npes <- execWriterT $ flip runReaderT (NPEDecl $ C.declName dcl) $ nakedPointers (C.declType dcl)
-    case npes of
-      [] -> return ()
-      _ ->  throwError $ mkNakedPointerError (C.nodeInfo dcl) npes
+nakedPtrCheckDecl :: (RegionResultMonad m, C.Declaration d, C.CNode d) => d -> m (Maybe NakedPointerError)
+nakedPtrCheckDecl dcl = do
+  npes <- execWriterT $ flip runReaderT (NPEDecl $ C.declName dcl) $ nakedPointers (C.declType dcl)
+  return $ case npes of
+    [] -> Nothing
+    _ ->  Just $ mkNakedPointerError (C.nodeInfo dcl) npes
+
+nakedPtrCheckDefn :: (RegionResultMonad m) => C.FunDef -> m (Maybe NakedPointerError)
+nakedPtrCheckDefn defn = do
+  npes <- execWriterT $ flip runReaderT (NPEDefn $ C.declName defn) $ nakedPointers defn
+  return $ case npes of
+    [] -> Nothing
+    _ ->  Just $ mkNakedPointerError (C.nodeInfo defn) npes
 
 analyze :: (RegionResultMonad m, CM.MonadCError m) => AnalysisOpts -> Map.Map C.Ident C.IdentDecl -> m ()
 analyze opts m = do
-  let (m', _) = C.splitIdentDecls True m
-  forM_ (optFilterDecls opts m') $ \decl -> do
-    ans <- runExceptT (nakedPtrCheckDecl decl)
-    case ans of
-      Left err -> CM.recordError err
-      Right () -> return ()
+  let (fnDecls, (_globalDefns, _enumDefns, fnDefns)) = C.splitIdentDecls True m
+  forM_ (optFilterDecls opts fnDecls) (recordNPE <=< nakedPtrCheckDecl)
+  forM_ fnDefns (recordNPE <=< nakedPtrCheckDefn)
+  where
+    recordNPE :: (CM.MonadCError m) => Maybe NakedPointerError -> m ()
+    recordNPE = traverse_ CM.recordError
+      
 
 -- | Options guiding the naked pointer analysis
 data AnalysisOpts =

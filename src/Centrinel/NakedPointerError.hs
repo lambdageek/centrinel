@@ -35,6 +35,7 @@ instance PP.Pretty NPEPosn where
     NPERet p -> [PP.text "in return type", PP.pretty p]
     NPETypeDefRef ni p -> [PP.text "at" <+> PP.prettyPos ni, PP.pretty p]
     NPETypeDefDef ni p -> [PP.text "in type defined at" <+> PP.prettyPos ni, PP.pretty p]
+    NPEDefn ident -> [PP.text "in the definition of " <+> PP.quotes (PP.pretty ident)]
 
 prettyOrdinal :: Integral n => n -> PP.Doc
 prettyOrdinal n = PP.integer (toInteger n) PP.<> suf
@@ -50,9 +51,10 @@ prettyOrdinal n = PP.integer (toInteger n) PP.<> suf
 -- trace of an error position
 data NPEPosn = NPEArg !Int !C.VarName !C.NodeInfo !NPEPosn -- function argument j
   | NPERet !NPEPosn -- function return value
-  | NPEDecl !C.VarName -- a declaration (this is always the end of the error position)
+  | NPEDecl !C.VarName -- a declaration
   | NPETypeDefRef !C.NodeInfo !NPEPosn -- a typedef occurrence
   | NPETypeDefDef !C.NodeInfo !NPEPosn -- the typedef declaration
+  | NPEDefn !C.VarName -- a (function) definition
 
 mkNakedPointerError :: C.NodeInfo -> [NPEVictim] -> NakedPointerError
 mkNakedPointerError ni npes = NakedPointerError ni npes Err.LevelError

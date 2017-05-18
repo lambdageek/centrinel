@@ -37,6 +37,7 @@ library
                        Centrinel.RegionIdent,
                        Centrinel.Region,
                        Centrinel.PrettyPrint,
+                       Centrinel.Control.Monad.Class.HasDefTable,
                        Centrinel.Control.Monad.Class.RegionResult,
                        Centrinel.Control.Monad.InferenceResult,
                        Centrinel.Control.Monad.LocalSymtab,

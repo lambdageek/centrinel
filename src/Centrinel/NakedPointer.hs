@@ -9,8 +9,6 @@ import Control.Monad.Reader.Class
 import Control.Monad.Reader (runReaderT, ReaderT (..))
 import Control.Monad.Writer.Class
 import Control.Monad.Writer (execWriterT)
-import Control.Monad.State.Class
-import Control.Monad.State.Strict (evalStateT, StateT (..))
 
 import Data.Foldable (traverse_)
 import qualified Data.Map as Map
@@ -28,6 +26,8 @@ import qualified Language.C.Analysis.DefTable as CDT
 import qualified Language.C.Analysis.TravMonad as CM
 
 import Centrinel.Control.Monad.Class.RegionResult
+
+import Centrinel.Control.Monad.LocalSymtab (evalLocalSymtabT)
 
 class HasRegionScheme t where
   -- | Get the 'RegionScheme' for the given type
@@ -178,29 +178,12 @@ instance NakedPointerSummary C.FunDef where
     let symtab = (undefined :: CDT.DefTable) -- TODO: need to get my hands on a symtab.  possibly i need to be called back from the main analysis?
     evalLocalSymtabT symtab $ inFunctionScope $ return () -- FIXME: finish me and get rid of the undefined DefTable
 
--- TODO: move this to a separate file
-newtype LocalSymtabT m a = LocalSymtabT { unLocalSymtabT :: StateT CDT.DefTable m a }
-  deriving (Functor, Applicative, Monad)
-
-instance Monad m => CM.MonadSymtab (LocalSymtabT m) where
-  getDefTable = LocalSymtabT get
-  withDefTable f = LocalSymtabT $ do
-    x <- get
-    let ~(a, y) = f x
-    put y
-    return a
-
-evalLocalSymtabT :: Monad m => CDT.DefTable -> LocalSymtabT m a -> m a
-evalLocalSymtabT st0 comp = evalStateT (unLocalSymtabT comp) st0
-
--- TODO: move this to a separate file
 inFunctionScope :: CM.MonadSymtab m => m a -> m a
 inFunctionScope comp = do
   CM.enterFunctionScope
   x <- comp
   CM.leaveFunctionScope
   return x
-  
 
 tellNPE :: (MonadReader NPEPosn m, MonadWriter NPEVictims m) => C.Type -> m ()
 tellNPE ty = ask >>= \npe -> tell [NPEVictim ty npe]

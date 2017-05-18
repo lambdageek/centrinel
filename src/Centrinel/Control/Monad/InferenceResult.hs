@@ -1,16 +1,13 @@
--- | Monad transformer that provides a view of the region unification results
+-- | A concrete monad transformer that is an instance of
+-- 'Centrinel.Control.Monad.Class.RegionResult'
 {-# language GeneralizedNewtypeDeriving #-}
-module Centrinel.RegionResultMonad (
-  -- * RegionResultMonad type class
-  RegionResultMonad(..)
-  -- * InferenceResultT monad transformer
-  , InferenceResultT
+module Centrinel.Control.Monad.InferenceResult (
+  InferenceResultT (..)
   , runInferenceResultT
   ) where
 
+
 import Control.Monad.Reader (runReaderT, ReaderT, asks)
-import Control.Monad.Writer (WriterT)
-import Control.Monad.Except (ExceptT)
 import Control.Monad.Trans.Class (MonadTrans(..))
 
 import qualified Data.Map as Map
@@ -19,26 +16,11 @@ import qualified Language.C.Data.Ident as C
 import qualified Language.C.Analysis.SemRep as C
 import qualified Language.C.Analysis.TravMonad as CM
 
+import Centrinel.Control.Monad.Class.RegionResult
+import Centrinel.Region (RegionScheme(..))
+import Centrinel.RegionInferenceResult (RegionInferenceResult)
 import Data.Assoc
 
-import Centrinel.Region
-import Centrinel.RegionInferenceResult
-
-class Monad m => RegionResultMonad m where
-  rrStructTagRegion :: StructTagRef -> m RegionScheme
-  rrLookupTypedef :: C.Ident -> m C.TypeDef
-
-instance (Monoid w, RegionResultMonad m) => RegionResultMonad (WriterT w m) where
-  rrStructTagRegion = lift . rrStructTagRegion
-  rrLookupTypedef = lift . rrLookupTypedef
-
-instance RegionResultMonad m => RegionResultMonad (ReaderT r m) where
-  rrStructTagRegion = lift . rrStructTagRegion
-  rrLookupTypedef = lift . rrLookupTypedef
-
-instance RegionResultMonad m => RegionResultMonad (ExceptT e m) where
-  rrStructTagRegion = lift . rrStructTagRegion
-  rrLookupTypedef = lift . rrLookupTypedef
 
 newtype InferenceResultT m a = InferenceResultT { unInferenceResultT :: ReaderT (Map.Map C.Ident C.TypeDef, RegionInferenceResult) m a }
   deriving (Functor, Applicative, Monad)

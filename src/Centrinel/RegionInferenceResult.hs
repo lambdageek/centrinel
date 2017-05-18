@@ -1,4 +1,10 @@
-module Centrinel.RegionInferenceResult where
+-- | Defines the type of region inference results - a mapping from
+-- structure tag names to region schemes.
+module Centrinel.RegionInferenceResult (
+  StructTagRef(..)
+  , RegionInferenceResult
+  , makeRegionInferenceResult
+  ) where
 
 import qualified Data.Map as Map
 

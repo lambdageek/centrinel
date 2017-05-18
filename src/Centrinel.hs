@@ -27,7 +27,7 @@ import qualified Centrinel.RegionInference as HG
 import Centrinel.RegionInferenceResult
 
 import qualified Centrinel.NakedPointer as NP
-import qualified Centrinel.RegionResultMonad as NP
+import qualified Centrinel.Control.Monad.InferenceResult as NP
 
 import qualified Centrinel.Util.Datafiles as HGData
 

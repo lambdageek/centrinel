@@ -6,11 +6,11 @@ module Centrinel.NakedPointer (analyze, AnalysisOpts(..)) where
 import Control.Monad (forM_, (<=<))
 
 import Control.Monad.Reader.Class
-import Control.Monad.Reader (runReaderT)
+import Control.Monad.Reader (runReaderT, ReaderT (..))
 import Control.Monad.Writer.Class
 import Control.Monad.Writer (execWriterT)
 import Control.Monad.State.Class
-import Control.Monad.State.Strict (StateT, evalStateT)
+import Control.Monad.State.Strict (evalStateT, StateT (..))
 
 import Data.Foldable (traverse_)
 import qualified Data.Map as Map
@@ -27,7 +27,7 @@ import qualified Language.C.Data.Position as C
 import qualified Language.C.Analysis.DefTable as CDT
 import qualified Language.C.Analysis.TravMonad as CM
 
-import Centrinel.RegionResultMonad
+import Centrinel.Control.Monad.Class.RegionResult
 
 class HasRegionScheme t where
   -- | Get the 'RegionScheme' for the given type

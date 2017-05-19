@@ -36,6 +36,7 @@ instance PP.Pretty NPEPosn where
     NPETypeDefRef ni p -> [PP.text "at" <+> PP.prettyPos ni, PP.pretty p]
     NPETypeDefDef ni p -> [PP.text "in type defined at" <+> PP.prettyPos ni, PP.pretty p]
     NPEDefn ident -> [PP.text "in the definition of " <+> PP.quotes (PP.pretty ident)]
+    NPEStmt ni p -> [PP.text "in statement at " <+> PP.prettyPos ni, PP.pretty p]
 
 prettyOrdinal :: Integral n => n -> PP.Doc
 prettyOrdinal n = PP.integer (toInteger n) PP.<> suf
@@ -55,6 +56,7 @@ data NPEPosn = NPEArg !Int !C.VarName !C.NodeInfo !NPEPosn -- function argument 
   | NPETypeDefRef !C.NodeInfo !NPEPosn -- a typedef occurrence
   | NPETypeDefDef !C.NodeInfo !NPEPosn -- the typedef declaration
   | NPEDefn !C.VarName -- a (function) definition
+  | NPEStmt !C.NodeInfo !NPEPosn -- a statement in a function
 
 mkNakedPointerError :: C.NodeInfo -> [NPEVictim] -> NakedPointerError
 mkNakedPointerError ni npes = NakedPointerError ni npes Err.LevelError

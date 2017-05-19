@@ -1,6 +1,6 @@
 -- | Analyze function signatures to identify naked pointers into the
 -- managed heap.
-{-# language GeneralizedNewtypeDeriving #-}
+{-# language GeneralizedNewtypeDeriving, DefaultSignatures #-}
 module Centrinel.NakedPointer (analyze, AnalysisOpts(..)) where
 
 import Control.Monad (forM_, (<=<))
@@ -21,9 +21,12 @@ import qualified Language.C.Analysis.SemRep as C
 import qualified Language.C.Data.Ident as C
 import qualified Language.C.Data.Node as C
 import qualified Language.C.Data.Position as C
+import qualified Language.C.Analysis.TypeUtils as CT
 
 import qualified Language.C.Analysis.DefTable as CDT
 import qualified Language.C.Analysis.TravMonad as CM
+
+import qualified Language.C.Syntax.AST as CStx
 
 import Centrinel.Control.Monad.Class.RegionResult
 
@@ -102,8 +105,22 @@ instance PointerRegionScheme C.TypeDef where
 declPtrRegion :: (RegionResultMonad m, C.Declaration d) => d -> m (Maybe RegionScheme)
 declPtrRegion = pointerRegionScheme . C.declType
 
+-- | Given a structure @a@, @nakedPointers a@ is a computation that
+-- 'tell's the naked pointers that appear in a.
 class NakedPointerSummary a where
   nakedPointers :: (RegionResultMonad m, MonadReader NPEPosn m, MonadWriter NPEVictims m) => a -> m ()
+
+-- | Given a structure @a@ whose meaning may depend on a local symbol table
+-- @nakedPointersFun a@ is a computation that 'tell's the naked
+-- pointers that appear in a.
+class NakedPointerFunSummary a where
+  funNakedPointers ::  (RegionResultMonad m, MonadReader NPEPosn m, MonadWriter NPEVictims m, CM.MonadSymtab m) => a -> m ()
+  default funNakedPointers :: (RegionResultMonad m, MonadReader NPEPosn m, MonadWriter NPEVictims m, NakedPointerSummary a) => a -> m ()
+  funNakedPointers = defaultFunNakedPointers
+
+-- | default implementation for @'nakedPointers' :: 'NakedPointerSummary' a => a -> m ()@ when @a@ is an instance of 'NakedPointerFunSummary'
+defaultFunNakedPointers :: (RegionResultMonad m, MonadReader NPEPosn m, MonadWriter NPEVictims m, NakedPointerSummary a) => a -> m ()
+defaultFunNakedPointers = nakedPointers
 
 instance NakedPointerSummary C.Type where
   nakedPointers ty_ =
@@ -113,6 +130,7 @@ instance NakedPointerSummary C.Type where
       C.ArrayType ty _sz _qs _attrs -> nakedPointers ty
       C.TypeDefType tdr _qs _attrs -> nakedPointers tdr
       C.FunctionType fty _attrs -> nakedPointers fty
+instance NakedPointerFunSummary C.Type
 
 instance NakedPointerSummary C.TypeDefRef where
   nakedPointers tdr =
@@ -173,17 +191,142 @@ instance NakedPointerSummary C.FunType where
                -- then if arg is a function type, check its args
               nakedPointers (C.declType param)
 
-instance NakedPointerSummary C.FunDef where
-  nakedPointers (C.FunDef _decl _stmt _ni) = do
-    let symtab = (undefined :: CDT.DefTable) -- TODO: need to get my hands on a symtab.  possibly i need to be called back from the main analysis?
-    evalLocalSymtabT symtab $ inFunctionScope $ return () -- FIXME: finish me and get rid of the undefined DefTable
+instance NakedPointerFunSummary C.FunDef where
+  funNakedPointers (C.FunDef decl stmt _ni) =
+    inFunctionScope $ do
+      addparameters decl
+      addAllLabels stmt
+      funNakedPointers stmt
+        where
+          addparameters fundecl =
+            case C.declType fundecl of
+              C.FunctionType (C.FunType _ params _) _ -> mapM_ addparam params
+              _ -> return () -- TODO: unexpected here.
+          addAllLabels _stmt = return () -- TODO: bring all the statement labels
+                               -- in the function body into scope.
+          addparam p = case p of
+            C.AbstractParamDecl {} -> return () -- TODO: warn that this is unexpected in a definition
+            C.ParamDecl vardecl ni -> do
+              let def = C.ObjectDef (C.ObjDef vardecl Nothing ni)
+              _ <- CM.withDefTable $ CDT.defineScopedIdent (C.declIdent def) def
+              return ()
+
+instance NakedPointerFunSummary C.Stmt where
+  funNakedPointers stmt0 =
+    case stmt0 of
+      CStx.CCompound lblDecls items _ni  ->
+        inBlockScope $ do
+          mapM_ (CM.withDefTable . CDT.defineLabel) lblDecls
+          funCompoundBody items
+      CStx.CLabel _lbl stmt _attrs _ni -> funNakedPointers stmt
+      CStx.CSwitch {} -> return ()  -- TODO
+      CStx.CCase {} -> return ()    -- TODO
+      CStx.CCases {} -> return ()   -- TODO
+      CStx.CDefault {} -> return () -- TODO
+      CStx.CExpr Nothing _ni -> return ()
+      CStx.CExpr (Just e) ni -> local (NPEStmt ni) $ funNakedPointers e
+      CStx.CIf condE trueS mfalseS _ni -> do
+        funNakedPointers condE
+        funNakedPointers trueS
+        traverse_ funNakedPointers mfalseS
+      CStx.CWhile condE body _whatIsThisBool ni -> do
+        local (NPEStmt ni) $ funNakedPointers condE
+        funNakedPointers body
+      CStx.CFor {} -> return () -- TODO
+      CStx.CCont {} -> return ()  -- ok
+      CStx.CBreak {} -> return () -- ok
+      CStx.CGoto {} -> return ()  -- ok
+      CStx.CGotoPtr e ni -> local (NPEStmt ni) $ funNakedPointers e
+      CStx.CReturn me ni -> do
+        local (NPEStmt ni) $ traverse_ funNakedPointers me -- TODO: and also something about enter/return pairs?
+      CStx.CAsm {} -> return () -- ugh
+
+instance NakedPointerFunSummary C.Expr where
+  funNakedPointers expr0 =
+    case expr0 of
+      CStx.CVar _ident _ni -> return () -- don't care, checked at declaration site
+      CStx.CConst _constant -> return ()
+      CStx.CCall callee args _ni -> do
+        funNakedPointers callee
+        mapM_ funNakedPointers args
+        let returnType = (undefined :: C.Type) -- TODO: get the return type from the callee
+        funNakedPointers returnType -- check that the function doesn't return a naked pointer
+      CStx.CComma es _ni -> traverse_ funNakedPointers es
+      CStx.CAssign _asgnop lhs rhs _ni -> do
+        funNakedPointers lhs
+        funNakedPointers rhs
+        -- TODO: and something about whether we're assigning through a naked pointer?
+      CStx.CCond condE trueE falseE _ni -> do
+        funNakedPointers condE
+        traverse_ funNakedPointers trueE -- apparently GNU allows leaving out the true case??
+        funNakedPointers falseE
+      CStx.CBinary _binop lhs rhs _ni -> do
+        funNakedPointers lhs
+        funNakedPointers rhs
+      CStx.CCast _decl e _ni -> do
+        funNakedPointers e
+        return () -- TODO: analyze the 'decl' and type of 'e'
+      CStx.CUnary _uop e _ni -> do
+        funNakedPointers e
+        return () -- TODO: handle derefs?
+      CStx.CSizeofExpr _e _ni -> return () -- I don't care, I think
+      CStx.CSizeofType _ty _ni -> return ()
+      CStx.CAlignofExpr _e _ni -> return ()
+      CStx.CAlignofType _ty _ni -> return ()
+      CStx.CComplexReal e _ni -> funNakedPointers e
+      CStx.CComplexImag e _ni -> funNakedPointers e
+      CStx.CIndex earr eidx _ni -> do
+        funNakedPointers earr
+        funNakedPointers eidx
+        return () -- TODO: check something here?
+      CStx.CMember expr _fieldIdent _isDeref _ni -> do
+        funNakedPointers expr
+        return () -- TODO: if its a handle, disallow payload access
+      CStx.CCompoundLit _decl ilist _ni ->
+        -- TODO: check whether _decl is a handle or something?
+        -- just traverse the initializers
+        traverse_ (funNakedPointers . snd) ilist
+      CStx.CGenericSelection {} -> error "C generic selection, in my code, really?"
+      CStx.CStatExpr stmt ni ->
+        local (NPEStmt ni) $ funNakedPointers stmt
+      CStx.CLabAddrExpr _id _ni -> return ()
+      CStx.CBuiltinExpr _builtinThing -> return ()
+
+instance NakedPointerFunSummary (CStx.CInitializer C.NodeInfo) where
+  funNakedPointers init0 =
+    case init0 of
+      CStx.CInitExpr e _ni -> funNakedPointers e
+      CStx.CInitList ilist _ni -> traverse_ (funNakedPointers . snd) ilist
+
+funCompoundBody :: (CM.MonadSymtab m, RegionResultMonad m,
+                    MonadWriter NPEVictims m, MonadReader NPEPosn m)
+                => [CStx.CBlockItem] -> m ()
+funCompoundBody [] = return ()
+funCompoundBody (item:items) = do
+  case item of
+    CStx.CBlockStmt stmt -> do
+      funNakedPointers stmt
+    CStx.CBlockDecl decl -> do
+      consumeDeclaration decl
+    CStx.CNestedFunDef {} -> return () -- TODO: warn unexpected
+  funCompoundBody items
+
+consumeDeclaration :: Monad m => CStx.CDecl -> m ()
+consumeDeclaration (CStx.CDecl _declSpecs _declarators _ni) = return () -- TODO: finish me
+consumeDeclaration (CStx.CStaticAssert {}) = return () -- TODO: handle static assertions?
+
+around :: Monad m => m () -> m () -> m a -> m a
+around enter leave comp = do
+  enter
+  x <- comp
+  leave
+  return x
 
 inFunctionScope :: CM.MonadSymtab m => m a -> m a
-inFunctionScope comp = do
-  CM.enterFunctionScope
-  x <- comp
-  CM.leaveFunctionScope
-  return x
+inFunctionScope = around CM.enterFunctionScope CM.leaveFunctionScope
+
+inBlockScope :: CM.MonadSymtab m => m a -> m a
+inBlockScope = around CM.enterBlockScope CM.leaveBlockScope
 
 tellNPE :: (MonadReader NPEPosn m, MonadWriter NPEVictims m) => C.Type -> m ()
 tellNPE ty = ask >>= \npe -> tell [NPEVictim ty npe]
@@ -197,7 +340,8 @@ nakedPtrCheckDecl dcl = do
 
 nakedPtrCheckDefn :: (RegionResultMonad m) => C.FunDef -> m (Maybe NakedPointerError)
 nakedPtrCheckDefn defn = do
-  npes <- execWriterT $ flip runReaderT (NPEDefn $ C.declName defn) $ nakedPointers defn
+  let symtab = (undefined :: CDT.DefTable)
+  npes <- execWriterT $ flip runReaderT (NPEDefn $ C.declName defn) $ evalLocalSymtabT symtab $ funNakedPointers defn
   return $ case npes of
     [] -> Nothing
     _ ->  Just $ mkNakedPointerError (C.nodeInfo defn) npes

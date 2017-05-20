@@ -39,3 +39,29 @@ int foo (XP x);
 struct Y* bar (int j, XP x);
 
 int baz (callback f);
+
+#define RT_KNOWN __attribute__((__allow_xregion(1)))
+
+struct RT_KNOWN XPayload {
+	X* raw;
+};
+
+typedef struct XPayload *XHandle;
+
+#define DUMMY_LABEL(n) ___label_dummy##n:
+
+/* Work around language-c 0.7 issue #32
+ * (https://github.com/visq/language-c/issues/32) we can't parse
+ * attributes on empty statements yet
+ * (https://gcc.gnu.org/onlinedocs/gcc/Attribute-Syntax.html#Statement-Attributes-2).
+ * So hang the attribute on a dummy label instead.
+ */
+#define SAFE_FIELD(handle,field) ({ DUMMY_LABEL(__LINE__) __attribute__((__allow_xregion(1))) ; (handle)->raw->field; })
+
+int foo_safe (XHandle x) {
+	int unsafe_a = x->raw->a;
+	{
+	dummy_56: __attribute__((stmt_attrib)) ; foo (x->raw);
+	}
+	int safe_a = SAFE_FIELD (x, a);
+}

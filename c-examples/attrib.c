@@ -58,10 +58,19 @@ typedef struct XPayload *XHandle;
  */
 #define SAFE_FIELD(handle,field) ({ DUMMY_LABEL(__LINE__) __attribute__((__allow_xregion(1))) ; (handle)->raw->field; })
 
+int rrrr (XHandle x) {
+	return x->raw->a;
+}
+
+int rrr (XHandle x) {
+	int unsafe_a = x->raw->a;
+	return unsafe_a;
+}
+
 int foo_safe (XHandle x) {
 	int unsafe_a = x->raw->a;
-	{
-	dummy_56: __attribute__((stmt_attrib)) ; foo (x->raw);
-	}
+	int also_unsafe_a = ({
+		dummy_73: __attribute__((__allow_xregon(1))) ; x->raw;
+		})->a;
 	int safe_a = SAFE_FIELD (x, a);
 }

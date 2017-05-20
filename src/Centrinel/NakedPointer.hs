@@ -21,12 +21,15 @@ import qualified Language.C.Analysis.SemRep as C
 import qualified Language.C.Data.Ident as C
 import qualified Language.C.Data.Node as C
 import qualified Language.C.Data.Position as C
-import qualified Language.C.Analysis.TypeUtils as CT
+-- import qualified Language.C.Analysis.TypeUtils as CT
+import qualified Language.C.Analysis.AstAnalysis as CT
 
 import qualified Language.C.Analysis.DefTable as CDT
 import qualified Language.C.Analysis.TravMonad as CM
 
 import qualified Language.C.Syntax.AST as CStx
+
+import Language.C.Analysis.TravMonad.Instances ()
 
 import Centrinel.Control.Monad.Class.RegionResult
 
@@ -114,7 +117,7 @@ class NakedPointerSummary a where
 -- @nakedPointersFun a@ is a computation that 'tell's the naked
 -- pointers that appear in a.
 class NakedPointerFunSummary a where
-  funNakedPointers ::  (RegionResultMonad m, MonadReader NPEPosn m, MonadWriter NPEVictims m, CM.MonadSymtab m) => a -> m ()
+  funNakedPointers ::  (RegionResultMonad m, MonadReader NPEPosn m, MonadWriter NPEVictims m, CM.MonadTrav m) => a -> m ()
   default funNakedPointers :: (RegionResultMonad m, MonadReader NPEPosn m, MonadWriter NPEVictims m, NakedPointerSummary a) => a -> m ()
   funNakedPointers = defaultFunNakedPointers
 
@@ -249,7 +252,10 @@ instance NakedPointerFunSummary C.Expr where
       CStx.CCall callee args _ni -> do
         funNakedPointers callee
         mapM_ funNakedPointers args
-        let returnType = (undefined :: C.Type) -- TODO: get the return type from the callee
+        let stmtctx = undefined
+            side = undefined
+        -- a bit unfortunate that we retraverse the subtree here
+        returnType <- CT.tExpr stmtctx side expr0
         funNakedPointers returnType -- check that the function doesn't return a naked pointer
       CStx.CComma es _ni -> traverse_ funNakedPointers es
       CStx.CAssign _asgnop lhs rhs _ni -> do
@@ -299,7 +305,8 @@ instance NakedPointerFunSummary (CStx.CInitializer C.NodeInfo) where
       CStx.CInitList ilist _ni -> traverse_ (funNakedPointers . snd) ilist
 
 funCompoundBody :: (CM.MonadSymtab m, RegionResultMonad m,
-                    MonadWriter NPEVictims m, MonadReader NPEPosn m)
+                    MonadWriter NPEVictims m, MonadReader NPEPosn m,
+                    CM.MonadTrav m)
                 => [CStx.CBlockItem] -> m ()
 funCompoundBody [] = return ()
 funCompoundBody (item:items) = do
@@ -338,15 +345,15 @@ nakedPtrCheckDecl dcl = do
     [] -> Nothing
     _ ->  Just $ mkNakedPointerError (C.nodeInfo dcl) npes
 
-nakedPtrCheckDefn :: (RegionResultMonad m) => C.FunDef -> m (Maybe NakedPointerError)
+nakedPtrCheckDefn :: (RegionResultMonad m, CM.MonadTrav m) => C.FunDef -> m (Maybe NakedPointerError)
 nakedPtrCheckDefn defn = do
-  let symtab = (undefined :: CDT.DefTable)
+  symtab <- CM.getDefTable
   npes <- execWriterT $ flip runReaderT (NPEDefn $ C.declName defn) $ evalLocalSymtabT symtab $ funNakedPointers defn
   return $ case npes of
     [] -> Nothing
     _ ->  Just $ mkNakedPointerError (C.nodeInfo defn) npes
 
-analyze :: (RegionResultMonad m, CM.MonadCError m) => AnalysisOpts -> Map.Map C.Ident C.IdentDecl -> m ()
+analyze :: (RegionResultMonad m, CM.MonadTrav m) => AnalysisOpts -> Map.Map C.Ident C.IdentDecl -> m ()
 analyze opts m = do
   let (fnDecls, (_globalDefns, _enumDefns, fnDefns)) = C.splitIdentDecls True m
   forM_ (optFilterDecls opts fnDecls) (recordNPE <=< nakedPtrCheckDecl)

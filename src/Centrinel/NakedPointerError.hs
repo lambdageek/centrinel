@@ -20,7 +20,7 @@ data NPEVictim = NPEVictim !C.Type !NPEPosn
 type NPEVictims = [NPEVictim]
 
 instance PP.Pretty NPEVictim where
-  pretty (NPEVictim ty pos) = PP.fcat [PP.text "Pointer to managed heap" <+> PP.pretty ty
+  pretty (NPEVictim ty pos) = PP.fsep [PP.text "Pointer to managed heap" <+> PP.pretty ty
                                       , PP.nest 8 (PP.pretty pos)
                                       ]
 
@@ -37,6 +37,7 @@ instance PP.Pretty NPEPosn where
     NPETypeDefDef ni p -> [PP.text "in type defined at" <+> PP.prettyPos ni, PP.pretty p]
     NPEDefn ident -> [PP.text "in the definition of " <+> PP.quotes (PP.pretty ident)]
     NPEStmt ni p -> [PP.text "in statement at " <+> PP.prettyPos ni, PP.pretty p]
+    NPETypeOfExpr ni p -> [PP.text "in the type of the expression at " <+> PP.prettyPos ni, PP.pretty p]
 
 prettyOrdinal :: Integral n => n -> PP.Doc
 prettyOrdinal n = PP.integer (toInteger n) PP.<> suf
@@ -57,6 +58,7 @@ data NPEPosn = NPEArg !Int !C.VarName !C.NodeInfo !NPEPosn -- function argument 
   | NPETypeDefDef !C.NodeInfo !NPEPosn -- the typedef declaration
   | NPEDefn !C.VarName -- a (function) definition
   | NPEStmt !C.NodeInfo !NPEPosn -- a statement in a function
+  | NPETypeOfExpr !C.NodeInfo  !NPEPosn -- in the type of the expression
 
 mkNakedPointerError :: C.NodeInfo -> [NPEVictim] -> NakedPointerError
 mkNakedPointerError ni npes = NakedPointerError ni npes Err.LevelError

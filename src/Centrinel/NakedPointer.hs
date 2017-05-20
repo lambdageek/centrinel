@@ -21,7 +21,6 @@ import qualified Language.C.Analysis.SemRep as C
 import qualified Language.C.Data.Ident as C
 import qualified Language.C.Data.Node as C
 import qualified Language.C.Data.Position as C
--- import qualified Language.C.Analysis.TypeUtils as CT
 import qualified Language.C.Analysis.AstAnalysis as CT
 
 import qualified Language.C.Analysis.DefTable as CDT
@@ -103,10 +102,14 @@ instance PointerRegionScheme C.TypeDef where
     case td of
       C.TypeDef _ident ty _attrs _qs -> pointerRegionScheme ty
 
--- | @declPtrRegion d = Just rs@ if the 'Declaration' @d@ has pointer type @ty *@ and
--- @ty@ has region scheme @rs@.  Otherwise returns @Nothing@.
-declPtrRegion :: (RegionResultMonad m, C.Declaration d) => d -> m (Maybe RegionScheme)
-declPtrRegion = pointerRegionScheme . C.declType
+-- | Tell when the given type is a naked pointer to the managed heap
+tellWhenManaged :: (MonadReader NPEPosn m, MonadWriter NPEVictims m, RegionResultMonad m)
+                => C.Type -> m ()
+tellWhenManaged ty = do
+  x <- pointerRegionScheme ty
+  case x of
+    Just rs | isManagedRegion rs -> tellNPE ty
+    _ -> return ()
 
 -- | Given a structure @a@, @nakedPointers a@ is a computation that
 -- 'tell's the naked pointers that appear in a.
@@ -177,22 +180,17 @@ instance NakedPointerSummary C.FunType where
         error "unexpected FunTypeIncomplete in nakedPtrCheckIdentDecl"
       C.FunType retty params _variadic -> do
           local NPERet $ do
-            x <- pointerRegionScheme retty
-            case x of
-              Just rs | isManagedRegion rs -> tellNPE retty
-              _ -> return ()
+            tellWhenManaged retty
             -- if return is a function, check its args too
             nakedPointers retty
           forM_ (zip params [0..]) $ \(param, j) -> do
             let ctx = NPEArg j (C.declName param) (C.nodeInfo param)
             local ctx $ do
+              let ty = C.declType param
               -- first check if the arg is a ptr to managed
-              x <- declPtrRegion param
-              case x of
-                Just rs | isManagedRegion rs -> tellNPE (C.declType param)
-                _ -> return ()
+              tellWhenManaged ty
                -- then if arg is a function type, check its args
-              nakedPointers (C.declType param)
+              nakedPointers ty
 
 instance NakedPointerFunSummary C.FunDef where
   funNakedPointers (C.FunDef decl stmt _ni) =
@@ -215,7 +213,7 @@ instance NakedPointerFunSummary C.FunDef where
               return ()
 
 instance NakedPointerFunSummary C.Stmt where
-  funNakedPointers stmt0 =
+  funNakedPointers stmt0 = do
     case stmt0 of
       CStx.CCompound lblDecls items _ni  ->
         inBlockScope $ do
@@ -249,14 +247,14 @@ instance NakedPointerFunSummary C.Expr where
     case expr0 of
       CStx.CVar _ident _ni -> return () -- don't care, checked at declaration site
       CStx.CConst _constant -> return ()
-      CStx.CCall callee args _ni -> do
+      CStx.CCall callee args ni -> do
         funNakedPointers callee
         mapM_ funNakedPointers args
         let stmtctx = undefined
             side = undefined
         -- a bit unfortunate that we retraverse the subtree here
         returnType <- CT.tExpr stmtctx side expr0
-        funNakedPointers returnType -- check that the function doesn't return a naked pointer
+        local (NPETypeOfExpr ni) $ tellWhenManaged returnType -- check that the function doesn't return a naked pointer
       CStx.CComma es _ni -> traverse_ funNakedPointers es
       CStx.CAssign _asgnop lhs rhs _ni -> do
         funNakedPointers lhs
@@ -285,8 +283,12 @@ instance NakedPointerFunSummary C.Expr where
         funNakedPointers earr
         funNakedPointers eidx
         return () -- TODO: check something here?
-      CStx.CMember expr _fieldIdent _isDeref _ni -> do
+      CStx.CMember expr _fieldIdent _isDeref ni -> do
         funNakedPointers expr
+        let stmtctx = undefined
+            side = undefined
+        returnType <- CT.tExpr stmtctx side expr0
+        local (NPETypeOfExpr ni) $ tellWhenManaged returnType
         return () -- TODO: if its a handle, disallow payload access
       CStx.CCompoundLit _decl ilist _ni ->
         -- TODO: check whether _decl is a handle or something?
@@ -308,18 +310,24 @@ funCompoundBody :: (CM.MonadSymtab m, RegionResultMonad m,
                     MonadWriter NPEVictims m, MonadReader NPEPosn m,
                     CM.MonadTrav m)
                 => [CStx.CBlockItem] -> m ()
-funCompoundBody [] = return ()
-funCompoundBody (item:items) = do
-  case item of
-    CStx.CBlockStmt stmt -> do
-      funNakedPointers stmt
-    CStx.CBlockDecl decl -> do
-      consumeDeclaration decl
-    CStx.CNestedFunDef {} -> return () -- TODO: warn unexpected
-  funCompoundBody items
+funCompoundBody = traverse_ compoundBodyItem 
+  where
+    compoundBodyItem item = case item of
+      CStx.CBlockStmt stmt -> do
+        funNakedPointers stmt
+      CStx.CBlockDecl decl -> do
+        consumeDeclaration decl
+      CStx.CNestedFunDef {} -> return () -- TODO: warn unexpected
 
-consumeDeclaration :: Monad m => CStx.CDecl -> m ()
-consumeDeclaration (CStx.CDecl _declSpecs _declarators _ni) = return () -- TODO: finish me
+consumeDeclaration :: (RegionResultMonad m,
+                       MonadReader NPEPosn m, MonadWriter NPEVictims m,
+                       CM.MonadTrav m)
+                   => CStx.CDecl
+                   -> m ()
+consumeDeclaration cdecl@(CStx.CDecl _declSpecs declarators _ni) = do
+  forM_ declarators $ \(_declarator, minitializer, _size) -> do
+    traverse funNakedPointers minitializer
+  CT.analyseDecl True cdecl
 consumeDeclaration (CStx.CStaticAssert {}) = return () -- TODO: handle static assertions?
 
 around :: Monad m => m () -> m () -> m a -> m a

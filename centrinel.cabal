@@ -47,7 +47,8 @@ library
                        Data.Assoc,
                        Centrinel.Main,
                        Centrinel.System.RunLikeCC,
-                       Centrinel.Util.Datafiles
+                       Centrinel.Util.Datafiles,
+                       Language.C.Analysis.TravMonad.Instances
   other-modules:       Centrinel.Debug.PrettyCppArgs,
                        Paths_centrinel
   -- other-extensions:    

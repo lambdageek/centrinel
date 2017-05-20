@@ -31,6 +31,12 @@ instance CM.MonadCError m => CM.MonadCError (InferenceResultT m) where
   recordError = InferenceResultT . lift . CM.recordError
   getErrors = InferenceResultT $ lift $ CM.getErrors
   
+instance CM.MonadName m => CM.MonadName (InferenceResultT m) where
+  genName = lift CM.genName
+
+instance CM.MonadSymtab m => CM.MonadSymtab (InferenceResultT m) where
+  getDefTable = lift CM.getDefTable
+  withDefTable = lift . CM.withDefTable
 
 instance Monad m => RegionResultMonad (InferenceResultT m) where
   rrStructTagRegion sr = InferenceResultT $ asks (certain . Map.lookup sr . Data.Assoc.getAssocMap . snd)
@@ -41,6 +47,9 @@ instance Monad m => RegionResultMonad (InferenceResultT m) where
     where
       certain Nothing = error "cannot get Nothing  from rrLookupTypedef"
       certain (Just a) = a
+
+instance CM.MonadTrav m => CM.MonadTrav (InferenceResultT m) where
+  handleDecl = lift . CM.handleDecl
 
 instance MonadTrans InferenceResultT where
   lift = InferenceResultT . lift

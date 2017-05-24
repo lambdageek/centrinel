@@ -48,7 +48,7 @@ library
   other-modules:       Centrinel.Debug.PrettyCppArgs,
                        Paths_centrinel
   -- other-extensions:    
-  build-depends:       base >=4.8 && <4.10,
+  build-depends:       base >=4.8 && <4.12,
                        containers >= 0.5.7.1,
                        language-c >= 0.6,
                        mtl >= 2.2.1,

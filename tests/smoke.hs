@@ -1,7 +1,6 @@
 module Main where
 
 import System.Exit (ExitCode(ExitSuccess))
-import Control.Monad.Except (runExceptT)
 
 import Test.Tasty
 import Test.Tasty.HUnit

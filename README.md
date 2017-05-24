@@ -38,8 +38,8 @@ install the needed programs into it. (You don't need `alex` and `happy` to run
 the analysis, just to build the analyzer binary.)
 
 ```bash
-git clone https://github.com/lambdageek/use-c.git
-cd use-c
+git clone https://github.com/lambdageek/centrinel.git
+cd centrinel
 cabal sandbox init
 cabal install happy
 cabal install alex

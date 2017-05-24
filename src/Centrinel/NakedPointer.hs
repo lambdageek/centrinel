@@ -192,6 +192,9 @@ instance NakedPointerSummary C.FunType where
                -- then if arg is a function type, check its args
               nakedPointers ty
 
+instance NakedPointerFunSummary a => NakedPointerFunSummary (Maybe a) where
+  funNakedPointers = traverse_ funNakedPointers
+
 instance NakedPointerFunSummary C.FunDef where
   funNakedPointers (C.FunDef decl stmt _ni) =
     inFunctionScope $ do
@@ -220,10 +223,12 @@ instance NakedPointerFunSummary C.Stmt where
           mapM_ (CM.withDefTable . CDT.defineLabel) lblDecls
           funCompoundBody items
       CStx.CLabel _lbl stmt _attrs _ni -> funNakedPointers stmt
-      CStx.CSwitch {} -> return ()  -- TODO
-      CStx.CCase {} -> return ()    -- TODO
-      CStx.CCases {} -> return ()   -- TODO
-      CStx.CDefault {} -> return () -- TODO
+      CStx.CSwitch e s ni -> do
+        funNakedPointers e
+        local (NPEStmt ni) $ funNakedPointers s
+      CStx.CCase _elit s ni -> local (NPEStmt ni) $ funNakedPointers s
+      CStx.CCases _e1 _e2 s ni -> local (NPEStmt ni) $ funNakedPointers s
+      CStx.CDefault s ni -> local (NPEStmt ni) $ funNakedPointers s
       CStx.CExpr Nothing _ni -> return ()
       CStx.CExpr (Just e) ni -> local (NPEStmt ni) $ funNakedPointers e
       CStx.CIf condE trueS mfalseS _ni -> do
@@ -233,7 +238,14 @@ instance NakedPointerFunSummary C.Stmt where
       CStx.CWhile condE body _whatIsThisBool ni -> do
         local (NPEStmt ni) $ funNakedPointers condE
         funNakedPointers body
-      CStx.CFor {} -> return () -- TODO
+      CStx.CFor initE guardE incE s ni ->
+        local (NPEStmt ni) $ do
+        case initE of
+          Left me -> funNakedPointers me
+          Right d -> consumeDeclaration d
+        funNakedPointers guardE
+        funNakedPointers incE
+        funNakedPointers s
       CStx.CCont {} -> return ()  -- ok
       CStx.CBreak {} -> return () -- ok
       CStx.CGoto {} -> return ()  -- ok
@@ -262,7 +274,7 @@ instance NakedPointerFunSummary C.Expr where
         -- TODO: and something about whether we're assigning through a naked pointer?
       CStx.CCond condE trueE falseE _ni -> do
         funNakedPointers condE
-        traverse_ funNakedPointers trueE -- apparently GNU allows leaving out the true case??
+        funNakedPointers trueE -- apparently GNU allows leaving out the true case??
         funNakedPointers falseE
       CStx.CBinary _binop lhs rhs _ni -> do
         funNakedPointers lhs
@@ -325,8 +337,7 @@ consumeDeclaration :: (RegionResultMonad m,
                    => CStx.CDecl
                    -> m ()
 consumeDeclaration cdecl@(CStx.CDecl _declSpecs declarators _ni) = do
-  forM_ declarators $ \(_declarator, minitializer, _size) -> do
-    traverse funNakedPointers minitializer
+  forM_ declarators $ \(_declarator, minitializer, _size) -> funNakedPointers minitializer
   CT.analyseDecl True cdecl
 consumeDeclaration (CStx.CStaticAssert {}) = return () -- TODO: handle static assertions?
 

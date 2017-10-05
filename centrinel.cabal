@@ -43,6 +43,7 @@ library
                        Centrinel.Control.Monad.LocalSymtab,
                        Control.Unification.IntVar.Extras,
                        Centrinel.NakedPointer,
+                       Centrinel.NakedPointer.PointerRegionScheme,
                        Centrinel.NakedPointerError,
                        Data.Assoc,
                        Centrinel.Main,

@@ -34,13 +34,13 @@ import qualified Centrinel.Util.Datafiles as HGData
 makeNakedPointerOpts :: FilePath -> NP.AnalysisOpts
 makeNakedPointerOpts fp = NP.AnalysisOpts {NP.analysisOptFilterPath = Just fp }
 
+-- | The main error class for a single Centrinel run
 data CentrinelError =
-  CentCPPError !System.Exit.ExitCode
-  | CentParseError !ParseError
-  | CentAnalysisError ![CentrinelAnalysisError]
+  CentCPPError !System.Exit.ExitCode -- ^ Error while invoking the C preprocessor
+  | CentParseError !ParseError -- ^ Error while parsing the input C file
+  | CentAnalysisError ![CentrinelAnalysisError] -- ^ Error reports from Centrinel analyses
 
 type CentrinelAnalysisError = CError
-
 
 -- | Remove any 'CPP.outputFile' options, and add
 -- preprocessor defines and definitions for Centrinel to successfully parse and

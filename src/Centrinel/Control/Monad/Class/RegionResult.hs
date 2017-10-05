@@ -14,7 +14,7 @@ import Control.Monad.Trans.Class (MonadTrans(..))
 import qualified Language.C.Data.Ident as C
 import qualified Language.C.Analysis.SemRep as C
 
-import Centrinel.Region (RegionScheme)
+import Centrinel.Region.Region (RegionScheme)
 import Centrinel.RegionInferenceResult (StructTagRef)
 
 class Monad m => RegionResultMonad m where

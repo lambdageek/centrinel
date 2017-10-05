@@ -29,9 +29,9 @@ import Language.C.Data.Error (CError)
 import Language.C.Analysis.SemRep (DeclEvent)
 import qualified Language.C.Analysis.TravMonad as AM
 
-import qualified Centrinel.RegionIdent as HGId
-import qualified Centrinel.RegionUnification as U
-import qualified Centrinel.RegionUnification.Term as U
+import qualified Centrinel.Region.Ident as HGId
+import qualified Centrinel.Region.Unification as U
+import qualified Centrinel.Region.Unification.Term as U
 import Centrinel.Warning (hgWarn)
 
 type HGAnalysis s = DeclEvent -> HGTrav s ()

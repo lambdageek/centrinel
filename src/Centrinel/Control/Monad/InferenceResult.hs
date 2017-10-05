@@ -17,7 +17,7 @@ import qualified Language.C.Analysis.SemRep as C
 import qualified Language.C.Analysis.TravMonad as CM
 
 import Centrinel.Control.Monad.Class.RegionResult
-import Centrinel.Region (RegionScheme(..))
+import Centrinel.Region.Region (RegionScheme(..))
 import Centrinel.RegionInferenceResult (RegionInferenceResult)
 import Data.Assoc
 

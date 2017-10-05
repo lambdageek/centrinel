@@ -1,6 +1,6 @@
 -- | Region unification monad and term structure
 {-# language RankNTypes, FunctionalDependencies, GeneralizedNewtypeDeriving #-}
-module Centrinel.RegionUnification where
+module Centrinel.Region.Unification where
 
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.Except
@@ -13,8 +13,8 @@ import qualified Control.Unification.IntVar.Extras as ExtraU
 import qualified Language.C.Data.Node as C
 import qualified Language.C.Analysis.TravMonad as C
 
-import Centrinel.Region (Region, RegionScheme(..))
-import Centrinel.RegionUnification.Term
+import Centrinel.Region.Region (Region, RegionScheme(..))
+import Centrinel.Region.Unification.Term
 import Centrinel.RegionMismatchError (RegionMismatchError)
  
 class Monad m => RegionUnification v m | m -> v where

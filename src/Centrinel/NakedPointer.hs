@@ -14,7 +14,7 @@ import Data.Foldable (traverse_)
 import qualified Data.Map as Map
 
 import Centrinel.RegionInferenceResult
-import Centrinel.Region
+import Centrinel.Region.Region
 import Centrinel.NakedPointerError
 
 import qualified Language.C.Analysis.SemRep as C

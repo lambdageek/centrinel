@@ -1,5 +1,5 @@
 {-# language GeneralizedNewtypeDeriving #-}
-module Centrinel.RegionUnification.Loc where
+module Centrinel.Region.Unification.Loc where
 
 import Data.Monoid (Monoid(..))
 

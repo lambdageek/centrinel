@@ -14,7 +14,7 @@ import qualified Data.Assoc
 import qualified Centrinel.PrettyPrint as PP
 import Centrinel.PrettyPrint ((<+>))
 
-import Centrinel.Region (RegionScheme)
+import Centrinel.Region.Region (RegionScheme)
 
 -- | @struct T@ reference - the name @T@ in the struct/union/enum tag namespace, but only when it's a struct.
 -- we're not interested in unions or enums.

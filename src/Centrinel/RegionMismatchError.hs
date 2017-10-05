@@ -9,9 +9,9 @@ import Language.C.Data.Node (NodeInfo)
 
 import qualified Centrinel.PrettyPrint as PP
 import Centrinel.PrettyPrint ((<+>))
-import Centrinel.Region
-import Centrinel.RegionUnification.Term
-import Centrinel.RegionUnification.Loc
+import Centrinel.Region.Region
+import Centrinel.Region.Unification.Term
+import Centrinel.Region.Unification.Loc
 
 data RegionMismatchError = RegionMismatchError !RegionVictim !RegionVictim !Err.ErrorLevel
 

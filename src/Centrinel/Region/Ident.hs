@@ -1,5 +1,5 @@
 {-# language FunctionalDependencies #-}
-module Centrinel.RegionIdent where
+module Centrinel.Region.Ident where
 
 import qualified Language.C.Data.Ident as Id
 

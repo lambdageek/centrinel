@@ -19,10 +19,10 @@ import qualified Language.C.Analysis.SemRep as A
 
 import Language.C.Analysis.Debug () -- P.Pretty instances 
 
-import Centrinel.Region
-import Centrinel.RegionUnification
-import Centrinel.RegionUnification.Term (regionUnifyVar, RegionVar)
-import Centrinel.RegionIdent
+import Centrinel.Region.Region
+import Centrinel.Region.Unification
+import Centrinel.Region.Unification.Term (regionUnifyVar, RegionVar)
+import Centrinel.Region.Ident
 
 inferDeclEvent :: (RegionAssignment RegionIdent v m, RegionUnification v m) => A.DeclEvent -> m ()
 inferDeclEvent e =

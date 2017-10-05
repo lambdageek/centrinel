@@ -1,4 +1,4 @@
-module Centrinel.RegionUnification.Term where
+module Centrinel.Region.Unification.Term where
 
 import Data.Functor.Contravariant (Contravariant (..))
 import Data.Monoid ((<>), Monoid(..))
@@ -9,9 +9,9 @@ import qualified Control.Unification.IntVar as U
 
 import qualified Language.C.Data.Node as C
 
-import Centrinel.Region (Region)
+import Centrinel.Region.Region (Region)
 
-import Centrinel.RegionUnification.Loc
+import Centrinel.Region.Unification.Loc
 
 
 newtype RegionVar = RegionVar { unRegionVar :: U.IntVar }

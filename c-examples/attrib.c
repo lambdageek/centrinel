@@ -1,4 +1,12 @@
 
+#ifndef __CENTRINEL_MANAGED_ATTR
+#define __CENTRINEL_MANAGED_ATTR __attribute__((__region(1)))
+#endif
+
+struct __CENTRINEL_MANAGED_ATTR X {
+	int a;
+};
+
 typedef struct X X;
 
 /* managed heap, derived from member */
@@ -8,13 +16,6 @@ struct Y {
 
 typedef struct Y Y;
 
-#ifndef __CENTRINEL_MANAGED_ATTR
-#define __CENTRINEL_MANAGED_ATTR __attribute__((__region(1)))
-#endif
-
-struct __CENTRINEL_MANAGED_ATTR X {
-	int a;
-};
 
 /* no fixed heap */
 struct Z {
@@ -40,15 +41,13 @@ struct Y* bar (int j, XP x);
 
 int baz (callback f);
 
-#define RT_KNOWN __attribute__((__allow_xregion(1)))
+#define RT_KNOWN __attribute__((__suppress(1)))
 
-struct RT_KNOWN XPayload {
+struct XPayload {
 	X* raw;
 };
 
 typedef struct XPayload *XHandle;
-
-#define DUMMY_LABEL(n) ___label_dummy##n:
 
 /* Work around language-c 0.7 issue #32
  * (https://github.com/visq/language-c/issues/32) we can't parse
@@ -56,7 +55,12 @@ typedef struct XPayload *XHandle;
  * (https://gcc.gnu.org/onlinedocs/gcc/Attribute-Syntax.html#Statement-Attributes-2).
  * So hang the attribute on a dummy label instead.
  */
-#define SAFE_FIELD(handle,field) ({ DUMMY_LABEL(__LINE__) __attribute__((__allow_xregion(1))) ; (handle)->raw->field; })
+#define DUMMY_LABEL_(n) ___label_dummy##n
+#define DUMMY_LABEL(n) DUMMY_LABEL_(n):
+
+#define UNSUPPRESS(expr) ({ DUMMY_LABEL(__LINE__) __attribute__((__suppress(0))) ; (expr); })
+#define SUPPRESS(expr) ({ DUMMY_LABEL(__LINE__) __attribute__((__suppress(1))) ; (expr); })
+#define SAFE_FIELD(handle,field) SUPPRESS(UNSUPPRESS(handle)->raw->field)
 
 int rrrr (XHandle x) {
 	return x->raw->a;
@@ -70,7 +74,7 @@ int rrr (XHandle x) {
 int foo_safe (XHandle x) {
 	int unsafe_a = x->raw->a;
 	int also_unsafe_a = ({
-		dummy_73: __attribute__((__allow_xregon(1))) ; x->raw;
+		dummy_76: __attribute__((__suppress(1))) ; (x)->raw;
 		})->a;
 	int safe_a = SAFE_FIELD (x, a);
 }

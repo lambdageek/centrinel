@@ -43,6 +43,7 @@ library
                        Centrinel.Control.Monad.LocalSymtab,
                        Control.Unification.IntVar.Extras,
                        Centrinel.NakedPointer,
+                       Centrinel.NakedPointer.Env,
                        Centrinel.NakedPointer.InDeclarations,
                        Centrinel.NakedPointer.InDefinitions,
                        Centrinel.NakedPointer.PointerRegionScheme,
@@ -54,6 +55,7 @@ library
                        Centrinel.Util.Datafiles,
                        Language.C.Analysis.TravMonad.Instances
   other-modules:       Centrinel.Debug.PrettyCppArgs,
+                       ZeptoLens,
                        Paths_centrinel
   -- other-extensions:    
   build-depends:       base >=4.8 && <4.12,

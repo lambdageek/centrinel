@@ -9,6 +9,8 @@ import Control.Monad.Writer (execWriterT)
 
 import Data.Foldable (forM_, traverse_)
 
+import ZeptoLens
+
 import qualified Language.C.Analysis.AstAnalysis as CT
 import qualified Language.C.Analysis.DefTable as CDT
 import qualified Language.C.Analysis.SemRep as C
@@ -21,20 +23,22 @@ import Language.C.Analysis.TravMonad.Instances ()
 import Centrinel.Control.Monad.Class.RegionResult
 import Centrinel.Control.Monad.LocalSymtab (evalLocalSymtabT)
 
+import Centrinel.NakedPointer.Env
 import Centrinel.NakedPointer.InDeclarations
 import Centrinel.NakedPointer.Utils
 import Centrinel.NakedPointerError (NPEPosn(..), NPEVictims, NakedPointerError, mkNakedPointerError)
 
+  
 -- | Given a structure @a@ whose meaning may depend on a local symbol table
 -- @nakedPointersFun a@ is a computation that 'tell's the naked
 -- pointers that appear in a.
 class NakedPointerFunSummary a where
-  funNakedPointers ::  (RegionResultMonad m, MonadReader NPEPosn m, MonadWriter NPEVictims m, CM.MonadTrav m) => a -> m ()
-  default funNakedPointers :: (RegionResultMonad m, MonadReader NPEPosn m, MonadWriter NPEVictims m, NakedPointerSummary a) => a -> m ()
+  funNakedPointers ::  (RegionResultMonad m, MonadReader AnalysisEnv m, MonadWriter NPEVictims m, CM.MonadTrav m) => a -> m ()
+  default funNakedPointers :: (RegionResultMonad m, MonadReader AnalysisEnv m, MonadWriter NPEVictims m, NakedPointerSummary a) => a -> m ()
   funNakedPointers = defaultFunNakedPointers
 
 -- | default implementation for @'nakedPointers' :: 'NakedPointerSummary' a => a -> m ()@ when @a@ is an instance of 'NakedPointerFunSummary'
-defaultFunNakedPointers :: (RegionResultMonad m, MonadReader NPEPosn m, MonadWriter NPEVictims m, NakedPointerSummary a) => a -> m ()
+defaultFunNakedPointers :: (RegionResultMonad m, MonadReader AnalysisEnv m, MonadWriter NPEVictims m, NakedPointerSummary a) => a -> m ()
 defaultFunNakedPointers = nakedPointers
 
 instance NakedPointerFunSummary a => NakedPointerFunSummary (Maybe a) where
@@ -72,21 +76,21 @@ instance NakedPointerFunSummary C.Stmt where
       CStx.CLabel _lbl stmt _attrs _ni -> funNakedPointers stmt
       CStx.CSwitch e s ni -> do
         funNakedPointers e
-        local (NPEStmt ni) $ funNakedPointers s
-      CStx.CCase _elit s ni -> local (NPEStmt ni) $ funNakedPointers s
-      CStx.CCases _e1 _e2 s ni -> local (NPEStmt ni) $ funNakedPointers s
-      CStx.CDefault s ni -> local (NPEStmt ni) $ funNakedPointers s
+        local (analysisPosn %~ NPEStmt ni) $ funNakedPointers s
+      CStx.CCase _elit s ni -> local (analysisPosn %~ NPEStmt ni) $ funNakedPointers s
+      CStx.CCases _e1 _e2 s ni -> local (analysisPosn %~ NPEStmt ni) $ funNakedPointers s
+      CStx.CDefault s ni -> local (analysisPosn %~ NPEStmt ni) $ funNakedPointers s
       CStx.CExpr Nothing _ni -> return ()
-      CStx.CExpr (Just e) ni -> local (NPEStmt ni) $ funNakedPointers e
+      CStx.CExpr (Just e) ni -> local (analysisPosn %~ NPEStmt ni) $ funNakedPointers e
       CStx.CIf condE trueS mfalseS _ni -> do
         funNakedPointers condE
         funNakedPointers trueS
         traverse_ funNakedPointers mfalseS
       CStx.CWhile condE body _whatIsThisBool ni -> do
-        local (NPEStmt ni) $ funNakedPointers condE
+        local (analysisPosn %~ NPEStmt ni) $ funNakedPointers condE
         funNakedPointers body
       CStx.CFor initE guardE incE s ni ->
-        local (NPEStmt ni) $ do
+        local (analysisPosn %~ NPEStmt ni) $ do
         case initE of
           Left me -> funNakedPointers me
           Right d -> consumeDeclaration d
@@ -96,9 +100,9 @@ instance NakedPointerFunSummary C.Stmt where
       CStx.CCont {} -> return ()  -- ok
       CStx.CBreak {} -> return () -- ok
       CStx.CGoto {} -> return ()  -- ok
-      CStx.CGotoPtr e ni -> local (NPEStmt ni) $ funNakedPointers e
+      CStx.CGotoPtr e ni -> local (analysisPosn %~ NPEStmt ni) $ funNakedPointers e
       CStx.CReturn me ni -> do
-        local (NPEStmt ni) $ traverse_ funNakedPointers me -- TODO: and also something about enter/return pairs?
+        local (analysisPosn %~ NPEStmt ni) $ traverse_ funNakedPointers me -- TODO: and also something about enter/return pairs?
       CStx.CAsm {} -> return () -- ugh
 
 instance NakedPointerFunSummary C.Expr where
@@ -113,7 +117,7 @@ instance NakedPointerFunSummary C.Expr where
             side = undefined
         -- a bit unfortunate that we retraverse the subtree here
         returnType <- CT.tExpr stmtctx side expr0
-        local (NPETypeOfExpr ni) $ tellWhenManaged returnType -- check that the function doesn't return a naked pointer
+        local (analysisPosn %~ NPETypeOfExpr ni) $ tellWhenManaged returnType -- check that the function doesn't return a naked pointer
       CStx.CComma es _ni -> traverse_ funNakedPointers es
       CStx.CAssign _asgnop lhs rhs _ni -> do
         funNakedPointers lhs
@@ -147,7 +151,7 @@ instance NakedPointerFunSummary C.Expr where
         let stmtctx = undefined
             side = undefined
         returnType <- CT.tExpr stmtctx side expr0
-        local (NPETypeOfExpr ni) $ tellWhenManaged returnType
+        local (analysisPosn %~ NPETypeOfExpr ni) $ tellWhenManaged returnType
         return () -- TODO: if its a handle, disallow payload access
       CStx.CCompoundLit _decl ilist _ni ->
         -- TODO: check whether _decl is a handle or something?
@@ -155,7 +159,7 @@ instance NakedPointerFunSummary C.Expr where
         traverse_ (funNakedPointers . snd) ilist
       CStx.CGenericSelection {} -> error "C generic selection, in my code, really?"
       CStx.CStatExpr stmt ni ->
-        local (NPEStmt ni) $ funNakedPointers stmt
+        local (analysisPosn %~ NPEStmt ni) $ funNakedPointers stmt
       CStx.CLabAddrExpr _id _ni -> return ()
       CStx.CBuiltinExpr _builtinThing -> return ()
 
@@ -166,7 +170,7 @@ instance NakedPointerFunSummary (CStx.CInitializer C.NodeInfo) where
       CStx.CInitList ilist _ni -> traverse_ (funNakedPointers . snd) ilist
 
 funCompoundBody :: (CM.MonadSymtab m, RegionResultMonad m,
-                    MonadWriter NPEVictims m, MonadReader NPEPosn m,
+                    MonadWriter NPEVictims m, MonadReader AnalysisEnv m,
                     CM.MonadTrav m)
                 => [CStx.CBlockItem] -> m ()
 funCompoundBody = traverse_ compoundBodyItem 
@@ -179,7 +183,7 @@ funCompoundBody = traverse_ compoundBodyItem
       CStx.CNestedFunDef {} -> return () -- TODO: warn unexpected
 
 consumeDeclaration :: (RegionResultMonad m,
-                       MonadReader NPEPosn m, MonadWriter NPEVictims m,
+                       MonadReader AnalysisEnv m, MonadWriter NPEVictims m,
                        CM.MonadTrav m)
                    => CStx.CDecl
                    -> m ()
@@ -205,7 +209,10 @@ inBlockScope = around CM.enterBlockScope CM.leaveBlockScope
 nakedPtrCheckDefn :: (RegionResultMonad m, CM.MonadTrav m) => C.FunDef -> m (Maybe NakedPointerError)
 nakedPtrCheckDefn defn = do
   symtab <- CM.getDefTable
-  npes <- execWriterT $ flip runReaderT (NPEDefn $ C.declName defn) $ evalLocalSymtabT symtab $ funNakedPointers defn
+  let
+    initialEnv :: AnalysisEnv
+    initialEnv = AnalysisEnv (NPEDefn $ C.declName defn) False
+  npes <- execWriterT $ flip runReaderT initialEnv $ evalLocalSymtabT symtab $ funNakedPointers defn
   return $ case npes of
     [] -> Nothing
     _ ->  Just $ mkNakedPointerError (C.nodeInfo defn) npes

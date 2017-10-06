@@ -10,11 +10,14 @@ import Control.Monad.Writer.Class
 import Control.Monad.Writer (execWriterT)
 import Data.Foldable (forM_)
 
+import ZeptoLens
+
 import qualified Language.C.Analysis.SemRep as C
 import qualified Language.C.Data.Node as C
 
 import Centrinel.Control.Monad.Class.RegionResult
 
+import Centrinel.NakedPointer.Env
 import Centrinel.NakedPointer.Utils
 import Centrinel.NakedPointerError (NPEPosn(..)
                                    , NPEVictims
@@ -25,7 +28,7 @@ import Centrinel.NakedPointerError (NPEPosn(..)
 -- | Given a structure @a@, @nakedPointers a@ is a computation that
 -- 'tell's the naked pointers that appear in a.
 class NakedPointerSummary a where
-  nakedPointers :: (RegionResultMonad m, MonadReader NPEPosn m, MonadWriter NPEVictims m) => a -> m ()
+  nakedPointers :: (RegionResultMonad m, MonadReader AnalysisEnv m, MonadWriter NPEVictims m) => a -> m ()
 
 instance NakedPointerSummary C.Type where
   nakedPointers ty_ =
@@ -46,13 +49,13 @@ instance NakedPointerSummary C.TypeDefRef where
       -- C.TypeDefRef _ (Just ty) ni ->
       --  local (NPETypeDefRef ni) $ nakedPointers ty
       C.TypeDefRef ident _ {-Nothing-} ni ->
-        local (NPETypeDefRef ni) (rrLookupTypedef ident >>= nakedPointers)
+        local (analysisPosn %~ NPETypeDefRef ni) (rrLookupTypedef ident >>= nakedPointers)
 
 instance NakedPointerSummary C.TypeDef where
   nakedPointers td =
     case td of
       C.TypeDef _ident ty _attrs ni ->
-        local (NPETypeDefDef ni) (nakedPointers ty)
+        local (analysisPosn %~ NPETypeDefDef ni) (nakedPointers ty)
 
 instance NakedPointerSummary C.FunType where
   nakedPointers fty =
@@ -77,13 +80,15 @@ instance NakedPointerSummary C.FunType where
         -- (as expected, "int foo (void);" will be a FunType with no arguments)
         error "unexpected FunTypeIncomplete in nakedPtrCheckIdentDecl"
       C.FunType retty params _variadic -> do
-          local NPERet $ do
+          local (analysisPosn %~ NPERet) $ do
             tellWhenManaged retty
             -- if return is a function, check its args too
             nakedPointers retty
           forM_ (zip params [0..]) $ \(param, j) -> do
-            let ctx = NPEArg j (C.declName param) (C.nodeInfo param)
-            local ctx $ do
+            let
+              posn :: NPEPosn -> NPEPosn
+              posn = NPEArg j (C.declName param) (C.nodeInfo param)
+            local (analysisPosn %~ posn) $ do
               let ty = C.declType param
               -- first check if the arg is a ptr to managed
               tellWhenManaged ty
@@ -92,7 +97,10 @@ instance NakedPointerSummary C.FunType where
 
 nakedPtrCheckDecl :: (RegionResultMonad m, C.Declaration d, C.CNode d) => d -> m (Maybe NakedPointerError)
 nakedPtrCheckDecl dcl = do
-  npes <- execWriterT $ flip runReaderT (NPEDecl $ C.declName dcl) $ nakedPointers (C.declType dcl)
+  let
+    initialEnv :: AnalysisEnv
+    initialEnv = AnalysisEnv (NPEDecl $ C.declName dcl) False
+  npes <- execWriterT $ flip runReaderT initialEnv $ nakedPointers (C.declType dcl)
   return $ case npes of
     [] -> Nothing
     _ ->  Just $ mkNakedPointerError (C.nodeInfo dcl) npes

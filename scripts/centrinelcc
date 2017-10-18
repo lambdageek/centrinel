@@ -18,4 +18,4 @@ if [ "z$REAL_CC" = "z" ]; then
     CC=cc
 fi
 
-($CC "$@") && exec centrinel "$@"
+($CC "$@") && exec centrinel -- "$@"

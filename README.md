@@ -72,10 +72,12 @@ Additionally, there is a script `centrinelcc` which can be used as `CC` in
 
 ### Just run the binary on a C file ###
 
-Usage: `centrinel [cc-opts] C-FILE`
+Usage: `centrinel -- CFLAGS CFILE`
 
-The program understands a modicum of `cc` command line options (and will
-silently drop others that it doesn't know) such as `-D` and `-I` and `-U`.
+The program understands a modicum of `cc` command line options such as `-D` and
+`-I` and `-U` and will pass others through to the preprocessor.  A few options
+that don't make sense for preprocessing (such as `-c` or `-MT` are understood
+and silently dropped).
 
 ```
 $ cabal run centrinel -- c-examples/attrib.c

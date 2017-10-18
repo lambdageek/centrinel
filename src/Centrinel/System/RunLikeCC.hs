@@ -1,7 +1,10 @@
 -- | Parse command line arguments like the given preprocessor
+{-# language DeriveFunctor #-}
 module Centrinel.System.RunLikeCC (
+  -- * A data type of compiler invocations
+  RunLikeCC (..)
   -- * Command line parsing
-  runLikeCC
+  , runLikeCC
   -- * Utilities
   , usage
   , anySourceArgs
@@ -11,6 +14,7 @@ module Centrinel.System.RunLikeCC (
   , newGCC
   , CppArgs) where
 
+import Data.Text (Text)
 import Control.Monad (when, unless)
 import qualified Data.List
 import Data.Monoid (Any(..))
@@ -21,6 +25,12 @@ import Language.C.System.Preprocess (Preprocessor(..), CppArgs)
 import Language.C.System.GCC (GCC, newGCC)
 
 import Centrinel.Debug.PrettyCppArgs (showCppArgs)
+
+
+-- | The compiler command that the build process ran on the given file
+-- and the working directory at the time.
+data RunLikeCC a = RunLikeCC { file :: Text, workingDirectory :: Text, artifact :: a }
+  deriving (Functor)
 
 -- | @runLikeCC progName gcc args@ parses the command line arguments like the
 -- given preprocessor.

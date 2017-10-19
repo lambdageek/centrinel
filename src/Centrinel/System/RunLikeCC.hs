@@ -25,7 +25,7 @@ import Language.C.System.GCC (GCC, newGCC)
 -- | The compiler command that the build process ran on the given file
 -- and the working directory at the time.
 data RunLikeCC a = RunLikeCC { file :: Text, workingDirectory :: Text, artifact :: a }
-  deriving (Functor)
+  deriving (Show, Functor)
 
 -- | The result of parsing a set of cc-like command line arguments
 data ParsedCC =

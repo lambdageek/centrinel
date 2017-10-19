@@ -29,5 +29,4 @@ commandObjectRunLikeCC cmd =
 -- Double quotes and backslashes are escaped with a backslash.
 -- Note that the name of the compiler is /not/ part of 'invokeArguments'.
 newtype Invoke = Invoke { invokeArguments :: [Text] }
-
-
+  deriving (Show)

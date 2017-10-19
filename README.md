@@ -111,6 +111,26 @@ c-examples/attrib.c:39: (column 5) [ERROR]  >>> Naked pointer(s) to managed obje
 
 ```
 
+**Note**: if you need to pass an option that starts with a dash `-` and you're
+using `cabal run`, you should write `--` twice: once for cabal and once for
+centrinel: `cabal run -- -- -DFOO -I../.. c-examples/attrib.c`)
+
+### Use a compilation database JSON file ###
+
+Usage: `centrinel --project compile_commands.json`
+
+A [Clang compilation
+database](http://clang.llvm.org/docs/JSONCompilationDatabase.html) is a JSON
+file that specifies a set of compiler invocations.  Tools such as `cmake` or
+[Bear](https://github.com/rizsotto/Bear) can be used to generate the
+compilation database (usually called `compile_commands.json`).  Centrinel can
+use the database with the `--project` option:
+
+```
+$ bear make -C some_project_directory # Note: doesn't work on OSX with System Integrity Protection
+$ cabal run centrinel -- --project compile_commands.json
+```
+
 ### Replace `CC` in a make ###
 
 The file [`scripts/centrinelcc`](scripts/centrinelcc) can be used as the value of the `CC` variable for `make`.
@@ -122,9 +142,9 @@ if compilation succeeds, it will invoke `centrinel` (which must be on the path)
 These steps are not automated yet
 
 ```
-cabal install
-cp dist/build/centrinel/centrinel [somewhere on your PATH]
-cp scripts/centrinelcc [somewhere on your PATH]
+$ cabal install
+$ cp dist/build/centrinel/centrinel [somewhere on your PATH]
+$ cp scripts/centrinelcc [somewhere on your PATH]
 ```
 
 #### Example ####
@@ -133,7 +153,6 @@ cp scripts/centrinelcc [somewhere on your PATH]
 $ export REAL_CC=/path/to/your/cc # if unset, defaults to 'cc'
 $ make CC=centrinelcc
 ```
-
 
 ## What works ##
 

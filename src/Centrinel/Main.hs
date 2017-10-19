@@ -1,13 +1,21 @@
+{-# language NamedFieldPuns #-}
 module Centrinel.Main where
 
 import Control.Monad (when, liftM)
 
+import Data.Foldable (forM_)
+import qualified Data.Text as T
+
+import qualified Data.ByteString.Lazy as B
+
+import qualified System.Directory as Dir
 import System.Exit (exitWith, exitSuccess, exitFailure)
 import System.Environment (lookupEnv)
 
 import Centrinel (runCentrinel, report)
-import Centrinel.System.RunLikeCC (runLikeCC, ParsedCC(..))
+import Centrinel.System.RunLikeCC (runLikeCC, RunLikeCC(..), ParsedCC(..))
 import qualified Centrinel.Util.Datafiles as HGData
+import qualified Centrinel.Util.CompilationDatabase as CDB
 
 import Language.C.System.GCC (newGCC)
 
@@ -19,6 +27,10 @@ type CppArgStrings = [String]
 data CentrinelCmd =
   -- | Run Centrinel on a single C source file.
   RunOneCentrinelCmd CentrinelOptions CppArgStrings
+  -- | Run Centrinel on each file in a Clang Compilation Database JSON file
+  -- using the preprocessor options found in the compilation database.
+  -- (If a file appears multiple times, it will be scanned multiple times)
+  | RunProjectCentrinelCmd CentrinelOptions FilePath
 
 data CentrinelOptions = CentrinelOptions
 
@@ -51,6 +63,32 @@ main cmd =
       datafiles <- HGData.getDatafiles
       n <- report (runCentrinel datafiles gcc cppArgs)
       exitWith n
+    RunProjectCentrinelCmd CentrinelOptions fp -> do
+      gcc <- liftM newGCC getCC
+      datafiles <- HGData.getDatafiles
+      putStrLn $ "Project is: '" ++ fp  ++ "'"
+      cdb <- do
+        res <- CDB.parseCompilationDatabase <$> B.readFile fp
+        case res of
+          Left err -> do
+            putStrLn $ "error parsing compilation database " ++ fp ++ ": " ++ err
+            exitFailure
+          Right ok -> return ok
+      forM_ cdb $ \(RunLikeCC {file, workingDirectory, artifact}) -> Dir.withCurrentDirectory (T.unpack workingDirectory) $ do
+        putStrLn $ "Analyzing " ++ show file
+        case runLikeCC gcc (T.unpack <$> CDB.invokeArguments artifact) of
+          NoInputFilesCC -> return ()
+          ErrorParsingCC err -> do
+            putStrLn $ "error parsing cc arguments: " ++ err
+            return ()
+          ParsedCC cppArgs ignoredArgs -> do
+            when (not $ null ignoredArgs) $ do
+              putStrLn "Ignored args:"
+              mapM_ (putStrLn . ("\t"++)) ignoredArgs
+            putStrLn (showCppArgs cppArgs)
+            _ <- report (runCentrinel datafiles gcc cppArgs)
+            return ()
+      return ()
 
 -- | Look for "REAL_CC" environment variable and return that path, if unset, return "cc"
 getCC :: IO FilePath

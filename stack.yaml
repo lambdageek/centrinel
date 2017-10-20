@@ -1,0 +1,7 @@
+resolver: nightly-2017-10-19
+packages:
+- '.'
+extra-deps:
+- clang-compilation-database-0.1.0.0
+flags: {}
+extra-package-dbs: []

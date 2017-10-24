@@ -1,7 +1,6 @@
-resolver: nightly-2017-10-19
+resolver: nightly-2017-10-21
 packages:
 - '.'
-extra-deps:
-- clang-compilation-database-0.1.0.0
+extra-deps: []
 flags: {}
 extra-package-dbs: []

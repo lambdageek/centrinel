@@ -3,6 +3,7 @@ module Centrinel.Main where
 
 import Control.Monad (when, liftM)
 
+import Data.Monoid (Monoid(..), First(..))
 import Data.Foldable (forM_)
 import qualified Data.Text as T
 
@@ -32,7 +33,11 @@ data CentrinelCmd =
   -- (If a file appears multiple times, it will be scanned multiple times)
   | RunProjectCentrinelCmd CentrinelOptions FilePath
 
-data CentrinelOptions = CentrinelOptions
+-- | Additional options
+data CentrinelOptions = CentrinelOptions {
+  -- ^ If @Just fp@ use @fp@ as the preprocessor for parsing C files.
+  compilerCentrinelOpt :: Maybe FilePath
+  }
 
 -- | Run the main computation
 --
@@ -46,8 +51,8 @@ data CentrinelOptions = CentrinelOptions
 main :: CentrinelCmd -> IO ()
 main cmd =
   case cmd of
-    RunOneCentrinelCmd CentrinelOptions args -> do
-      gcc <- liftM newGCC getCC
+    RunOneCentrinelCmd options args -> do
+      gcc <- liftM newGCC (getCC options)
       cppArgs <- case runLikeCC gcc args of
         NoInputFilesCC -> exitSuccess -- nothing to do
         ErrorParsingCC err -> do
@@ -63,8 +68,8 @@ main cmd =
       datafiles <- HGData.getDatafiles
       n <- report (runCentrinel datafiles gcc cppArgs)
       exitWith n
-    RunProjectCentrinelCmd CentrinelOptions fp -> do
-      gcc <- liftM newGCC getCC
+    RunProjectCentrinelCmd options fp -> do
+      gcc <- liftM newGCC (getCC options)
       datafiles <- HGData.getDatafiles
       putStrLn $ "Project is: '" ++ fp  ++ "'"
       cdb <- do
@@ -91,5 +96,13 @@ main cmd =
       return ()
 
 -- | Look for "REAL_CC" environment variable and return that path, if unset, return "cc"
-getCC :: IO FilePath
-getCC = maybe "cc" id <$> lookupEnv "REAL_CC"
+getCC :: CentrinelOptions -> IO FilePath
+getCC options =
+  (maybe "cc" id . getFirst . mconcat) <$> alts
+  where
+    alts :: IO [First FilePath]
+    alts = sequence [checkOpt, checkEnv]
+    checkOpt :: IO (First FilePath)
+    checkOpt = return $ First $ compilerCentrinelOpt options
+    checkEnv :: IO (First FilePath)
+    checkEnv = First <$> lookupEnv "REAL_CC"

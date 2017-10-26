@@ -41,14 +41,26 @@ data ParsedCC =
 -- @progName@ is used in error messages.
 runLikeCC :: Preprocessor cpp => cpp -> [String] -> ParsedCC
 {-# specialize runLikeCC :: GCC -> [String] -> ParsedCC #-}
-runLikeCC cpp args =
+runLikeCC cpp args0 =
+  let (preIgnored, args) = prefilterCCArgs args0
+  in if not $ getAny $ anySourceArgs args
   -- if there's no source file among the arguments,
   -- (if we're called from the linking step), do nothing.
-  if not $ getAny $ anySourceArgs args
   then NoInputFilesCC
   else case parseCPPArgs cpp args of
     Left err -> ErrorParsingCC err
-    Right (cppArgs, ignoredArgs) -> ParsedCC cppArgs ignoredArgs
+    Right (cppArgs, ignoredArgs) -> ParsedCC cppArgs (preIgnored ++ ignoredArgs)
+
+-- | Filter out known problematic CFLAGS that haven't made it into language-c yet.
+prefilterCCArgs :: [String] -> ([String], [String])
+prefilterCCArgs = Data.List.partition isProblem
+  where
+    isProblem flag =
+      getAny $ foldMap (\(f,_excuse) -> Any (f flag)) predicates
+    predicates :: [(String -> Bool, String)]
+    predicates =
+      [(Data.List.isPrefixOf "-g", "-ggdb3 leaves #defines in preprocessor output")
+      ]
 
 -- | Returns @Any True@ iff any of the given strings looks like a source file.
 -- It uses a pretty rough heuristic: the string must not begin with a @'-'@ and

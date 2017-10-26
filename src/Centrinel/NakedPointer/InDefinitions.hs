@@ -99,12 +99,16 @@ instance NakedPointerFunSummary C.Stmt where
         funNakedPointers body
       CStx.CFor initE guardE incE s ni ->
         local (analysisPosn %~ NPEStmt ni) $ do
-        case initE of
-          Left me -> funNakedPointers me
-          Right d -> consumeDeclaration d
-        funNakedPointers guardE
-        funNakedPointers incE
-        funNakedPointers s
+        scope <- case initE of
+          Left me -> do
+            funNakedPointers me
+            return id
+          Right d -> do
+            return (\cont -> inBlockScope (consumeDeclaration d >> cont))
+        scope $ do
+          funNakedPointers guardE
+          funNakedPointers incE
+          funNakedPointers s
       CStx.CCont {} -> return ()  -- ok
       CStx.CBreak {} -> return () -- ok
       CStx.CGoto {} -> return ()  -- ok

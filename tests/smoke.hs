@@ -20,6 +20,7 @@ smokeTests :: TestTree
 smokeTests = testGroup "Smoke Tests"
   [ testGroup "Examples run"
     [ assertRunsTestCase "c-examples/incl.c"
+    , assertRunsTestCase "c-examples/c99.c"
     ]
   ]
 

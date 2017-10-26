@@ -35,7 +35,7 @@ data CentrinelCmd =
 
 -- | Additional options
 data CentrinelOptions = CentrinelOptions {
-  -- ^ If @Just fp@ use @fp@ as the preprocessor for parsing C files.
+  -- | If @Just fp@ use @fp@ as the preprocessor for parsing C files.
   compilerCentrinelOpt :: Maybe FilePath
   }
 

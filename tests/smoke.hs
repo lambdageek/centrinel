@@ -1,7 +1,5 @@
 module Main where
 
-import System.Exit (ExitCode(ExitSuccess))
-
 import Test.Tasty
 import Test.Tasty.HUnit
 
@@ -32,7 +30,7 @@ assertRunsTestCase fp = testCase (fp ++ " runs") cmd
       case runLikeCC gcc [fp] of
         ParsedCC args [] -> do
           ec <- C.report C.defaultOutputMethod $ C.runCentrinel datafiles gcc args
-          assertEqual "exit code" ExitSuccess ec
+          assertEqual "exit code" (Just ()) (const () <$> ec) -- throw away analysis results
         NoInputFilesCC -> assertFailure $ "expected input files in smoketest " ++ fp
         ErrorParsingCC err -> assertFailure $ "unexpected parse error \"" ++ err ++ "\" in smoketest " ++ fp
         ParsedCC _args ignoredArgs -> assertFailure $ "unepxected ignored args " ++ show ignoredArgs ++ " in smoketest " ++ fp

@@ -72,12 +72,13 @@ Additionally, there is a script `centrinelcc` which can be used as `CC` in
 
 ### Just run the binary on a C file ###
 
-Usage: `centrinel -- CFLAGS CFILE`
+Usage: `centrinel [--output FILE] -- CFLAGS CFILE`
 
 The program understands a modicum of `cc` command line options such as `-D` and
 `-I` and `-U` and will pass others through to the preprocessor.  A few options
 that don't make sense for preprocessing (such as `-c` or `-MT` are understood
-and silently dropped).
+and silently dropped).  By default analysis results are printed to stdout; to
+direct them to a file, add a `--output FILE` option.
 
 ```
 $ cabal run centrinel -- c-examples/attrib.c
@@ -117,7 +118,7 @@ centrinel: `cabal run -- -- -DFOO -I../.. c-examples/attrib.c`)
 
 ### Use a compilation database JSON file ###
 
-Usage: `centrinel --project compile_commands.json`
+Usage: `centrinel [--output FILE] --project compile_commands.json`
 
 A [Clang compilation
 database](http://clang.llvm.org/docs/JSONCompilationDatabase.html) is a JSON
@@ -153,6 +154,13 @@ $ cp scripts/centrinelcc [somewhere on your PATH]
 $ export REAL_CC=/path/to/your/cc # if unset, defaults to 'cc'
 $ make CC=centrinelcc
 ```
+
+## Specifying a different C preprocesor ##
+
+By default centrinel will use the value of the `REAL_CC` environment variable
+to run the preprocessor, or `cc` if unset.  Another way to specify the compiler
+is using the `--use-cc CC` option which takes precedence over the environment
+variable.
 
 ## What works ##
 

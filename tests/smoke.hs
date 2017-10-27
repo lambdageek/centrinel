@@ -6,6 +6,7 @@ import Test.Tasty
 import Test.Tasty.HUnit
 
 import qualified Centrinel as C
+import qualified Centrinel.Report as C
 import Centrinel.System.RunLikeCC (runLikeCC, ParsedCC(..))
 import Language.C.System.GCC (newGCC)
 import qualified Centrinel.Util.Datafiles as CData
@@ -30,7 +31,7 @@ assertRunsTestCase fp = testCase (fp ++ " runs") cmd
     cmd = do
       case runLikeCC gcc [fp] of
         ParsedCC args [] -> do
-          ec <- C.report $ C.runCentrinel datafiles gcc args
+          ec <- C.report C.defaultOutputMethod $ C.runCentrinel datafiles gcc args
           assertEqual "exit code" ExitSuccess ec
         NoInputFilesCC -> assertFailure $ "expected input files in smoketest " ++ fp
         ErrorParsingCC err -> assertFailure $ "unexpected parse error \"" ++ err ++ "\" in smoketest " ++ fp

@@ -13,7 +13,8 @@ import qualified System.Directory as Dir
 import System.Exit (exitWith, exitSuccess, exitFailure)
 import System.Environment (lookupEnv)
 
-import Centrinel (runCentrinel, report)
+import Centrinel (runCentrinel)
+import Centrinel.Report (OutputMethod, report)
 import Centrinel.System.RunLikeCC (runLikeCC, RunLikeCC(..), ParsedCC(..))
 import qualified Centrinel.Util.Datafiles as HGData
 import qualified Centrinel.Util.CompilationDatabase as CDB
@@ -37,6 +38,8 @@ data CentrinelCmd =
 data CentrinelOptions = CentrinelOptions {
   -- | If @Just fp@ use @fp@ as the preprocessor for parsing C files.
   compilerCentrinelOpt :: Maybe FilePath
+  -- | How to present the analysis results
+  , outputCentrinelOpt :: OutputMethod
   }
 
 -- | Run the main computation
@@ -66,7 +69,7 @@ main cmd =
           putStrLn (showCppArgs cppArgs)
           return cppArgs
       datafiles <- HGData.getDatafiles
-      n <- report (runCentrinel datafiles gcc cppArgs)
+      n <- report (outputCentrinelOpt options) (runCentrinel datafiles gcc cppArgs)
       exitWith n
     RunProjectCentrinelCmd options fp -> do
       gcc <- liftM newGCC (getCC options)
@@ -91,7 +94,7 @@ main cmd =
               putStrLn "Ignored args:"
               mapM_ (putStrLn . ("\t"++)) ignoredArgs
             putStrLn (showCppArgs cppArgs)
-            _ <- report (runCentrinel datafiles gcc cppArgs)
+            _ <- report (outputCentrinelOpt options) (runCentrinel datafiles gcc cppArgs)
             return ()
       return ()
 

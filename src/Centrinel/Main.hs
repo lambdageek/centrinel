@@ -2,6 +2,7 @@
 module Centrinel.Main where
 
 import Control.Monad (when, liftM)
+import Control.Monad.Except (runExceptT)
 
 import Data.Monoid (Monoid(..), First(..))
 import Data.Foldable (forM_)
@@ -10,10 +11,11 @@ import qualified Data.Text as T
 import qualified Data.ByteString.Lazy as B
 
 import qualified System.Directory as Dir
-import System.Exit (exitWith, exitSuccess, exitFailure)
+import System.Exit (exitSuccess, exitFailure)
 import System.Environment (lookupEnv)
 
-import Centrinel (runCentrinel, report)
+import Centrinel (runCentrinel)
+import Centrinel.Report (OutputMethod, withOutputMethod, presentReport, report)
 import Centrinel.System.RunLikeCC (runLikeCC, RunLikeCC(..), ParsedCC(..))
 import qualified Centrinel.Util.Datafiles as HGData
 import qualified Centrinel.Util.CompilationDatabase as CDB
@@ -35,8 +37,10 @@ data CentrinelCmd =
 
 -- | Additional options
 data CentrinelOptions = CentrinelOptions {
-  -- ^ If @Just fp@ use @fp@ as the preprocessor for parsing C files.
+  -- | If @Just fp@ use @fp@ as the preprocessor for parsing C files.
   compilerCentrinelOpt :: Maybe FilePath
+  -- | How to present the analysis results
+  , outputCentrinelOpt :: OutputMethod
   }
 
 -- | Run the main computation
@@ -66,8 +70,10 @@ main cmd =
           putStrLn (showCppArgs cppArgs)
           return cppArgs
       datafiles <- HGData.getDatafiles
-      n <- report (runCentrinel datafiles gcc cppArgs)
-      exitWith n
+      res <- report (outputCentrinelOpt options) (runCentrinel datafiles gcc cppArgs)
+      case res of
+        Nothing -> exitFailure
+        Just _ -> exitSuccess
     RunProjectCentrinelCmd options fp -> do
       gcc <- liftM newGCC (getCC options)
       datafiles <- HGData.getDatafiles
@@ -79,21 +85,23 @@ main cmd =
             putStrLn $ "error parsing compilation database " ++ fp ++ ": " ++ err
             exitFailure
           Right ok -> return ok
-      forM_ cdb $ \(RunLikeCC {file, workingDirectory, artifact}) -> Dir.withCurrentDirectory (T.unpack workingDirectory) $ do
+      withOutputMethod (outputCentrinelOpt options) $ \present -> 
+        forM_ cdb $ \(RunLikeCC {file, workingDirectory, artifact}) ->
+        Dir.withCurrentDirectory (T.unpack workingDirectory) $ do
         putStrLn $ "Analyzing " ++ show file
         case runLikeCC gcc (T.unpack <$> CDB.invokeArguments artifact) of
           NoInputFilesCC -> return ()
-          ErrorParsingCC err -> do
+          ErrorParsingCC err -> 
             putStrLn $ "error parsing cc arguments: " ++ err
-            return ()
           ParsedCC cppArgs ignoredArgs -> do
             when (not $ null ignoredArgs) $ do
               putStrLn "Ignored args:"
               mapM_ (putStrLn . ("\t"++)) ignoredArgs
             putStrLn (showCppArgs cppArgs)
-            _ <- report (runCentrinel datafiles gcc cppArgs)
+            result <- runExceptT (runCentrinel datafiles gcc cppArgs)
+            _ <- presentReport present result
             return ()
-      return ()
+
 
 -- | Look for "REAL_CC" environment variable and return that path, if unset, return "cc"
 getCC :: CentrinelOptions -> IO FilePath

@@ -70,15 +70,17 @@ instance NakedPointerSummary C.FunType where
     -- TODO: this does mean we potentially revisit the same typedef many times.
     -- Maybe use a visited set?
     case fty of
-      C.FunTypeIncomplete {} ->
+      C.FunTypeIncomplete retty ->
         -- analysis is after typechecking, all params seen already.
         --
-        -- FIXME: There's one place where these can still happen.  If a
-        -- function is declared without a definition as "int foo ();" then
+        -- There's one place where we can still get a FunTypeIncomplete:
+        -- a function is declared without a definition as "int foo ();" then
         -- GlobalDecls still has it as a FunTypeIncomplete
         --
         -- (as expected, "int foo (void);" will be a FunType with no arguments)
-        error "unexpected FunTypeIncomplete in nakedPtrCheckIdentDecl"
+        local (analysisPosn %~ NPERet) $ do
+        tellWhenManaged retty
+        nakedPointers retty
       C.FunType retty params _variadic -> do
           local (analysisPosn %~ NPERet) $ do
             tellWhenManaged retty

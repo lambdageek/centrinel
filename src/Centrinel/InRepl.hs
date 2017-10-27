@@ -2,15 +2,16 @@
 module Centrinel.InRepl where
 
 import Control.Monad.Except
-import qualified System.Exit
 
 import Language.C.Syntax.AST (CTranslUnit)
 import qualified Language.C.System.Preprocess as CPP
 import Language.C.System.GCC (newGCC)
+import qualified Language.C.Analysis.SemRep as A
 
 import Centrinel
 import Centrinel.Types
 import Centrinel.Report
+import Centrinel.RegionInferenceResult (RegionInferenceResult)
 import qualified Centrinel.PrettyPrint as P
 import qualified Centrinel.NakedPointer as NP
 
@@ -25,7 +26,7 @@ pp = print . P.pretty
 -- >>> let fp = "c-examples/attrib.hs"
 -- >>> let opts = makeNakedPointerOpts fp
 -- >>> think' opts fp
-think' :: NP.AnalysisOpts -> FilePath -> IO System.Exit.ExitCode
+think' :: NP.AnalysisOpts -> FilePath -> IO (Maybe (A.GlobalDecls, RegionInferenceResult))
 think' npOpts fp = report defaultOutputMethod (inp >>= think npOpts)
   where
     inp :: ExceptT CentrinelError IO CTranslUnit

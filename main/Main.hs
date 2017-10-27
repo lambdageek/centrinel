@@ -35,5 +35,14 @@ outputMethodOptions = Centrinel.Report.OutputMethod <$> outputDestinationOption 
       <|> pure Centrinel.Report.StdOutOutputDestination 
 
     outputFormatOption :: Parser Centrinel.Report.OutputFormat
-    outputFormatOption = pure Centrinel.Report.PlainTextOutputFormat
+    outputFormatOption =
+      (option outputFormatReader (long "format" <> help "output format: text or json (default is text)"
+                                  <> metavar "FMT"))
+      <|> pure Centrinel.Report.PlainTextOutputFormat
 
+    outputFormatReader :: ReadM Centrinel.Report.OutputFormat
+    outputFormatReader = maybeReader $ \s ->
+      case s of
+        "text" -> pure Centrinel.Report.PlainTextOutputFormat
+        "json" -> pure Centrinel.Report.JSONOutputFormat
+        _ -> empty

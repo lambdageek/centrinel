@@ -15,7 +15,7 @@ theParser =
     commonOptions = Centrinel.Main.CentrinelOptions <$> useCCOption <*> outputMethodOptions
 
     useCCOption :: Parser (Maybe FilePath)
-    useCCOption = optional $ strOption (long "use-cc" <> metavar "CC" <> help "Use the given C compiler for preprocessing (Default: CC environment value or 'cc' if unset)")
+    useCCOption = optional $ strOption (long "use-cc" <> metavar "CC" <> help "Use the given C compiler for preprocessing (Default: REAL_CC environment value or 'cc' if unset)")
 
     runProject :: Parser (Centrinel.Main.CentrinelOptions -> Centrinel.Main.CentrinelCmd)
     runProject = flip Centrinel.Main.RunProjectCentrinelCmd <$> strOption (long "project" <> help "Run the analysis on every file in the compilation database JSON_FILE" <> metavar "JSON_FILE")

@@ -15,7 +15,7 @@
 # set -x
 
 if [ "z$REAL_CC" = "z" ]; then
-    CC=cc
+    REAL_CC=cc
 fi
 
-($CC "$@") && exec centrinel -- "$@"
+($REAL_CC "$@") && exec centrinel -- "$@"

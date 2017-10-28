@@ -19,8 +19,6 @@
 /* attribute specifier for above */
 #define __CENTRINEL_MANAGED_ATTR __attribute__((__CENTRINEL_MANAGED_REGION))
 
-
-
 #ifdef __CENTRINEL_HACK_SYNC_ATOMICS
 
 /* complete list is here https://gcc.gnu.org/onlinedocs/gcc/_005f_005fsync-Builtins.html */
@@ -50,5 +48,20 @@
 #define __sync_lock_release(ptr) do { *(ptr) = 0; } while (0)
 
 #endif /* __CENTRINEL_HACK_SYNC_ATOMICS */
+
+/* GCC has a ton of builtins that language-c doesn't know about, which
+ * causes its semantic analysis to error out.  Quick and dirty hack to
+ * predeclare the builtins that are able to have reasonable
+ * definitions.
+ */
+#ifdef __GNUC__
+/* FIXME: want size_t return here, but can't include any system
+ * header, and language-c internally has size_t as int in the semantic
+ * pass, but not in the lexer.  If language-c ever changes how it
+ * handles size_t, this may need to change. */
+int __bulitin_strlen (const char *s); 
+#endif /*__GNUC__*/
+
+
 
 #endif

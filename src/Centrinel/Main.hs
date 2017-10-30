@@ -6,6 +6,7 @@ import Control.Monad.Except (runExceptT)
 
 import Data.Monoid (Monoid(..), First(..))
 import Data.Foldable (forM_)
+import qualified Data.List as L
 import qualified Data.Text as T
 
 import qualified Data.ByteString.Lazy as B
@@ -13,10 +14,11 @@ import qualified Data.ByteString.Lazy as B
 import qualified System.Directory as Dir
 import System.Exit (exitSuccess, exitFailure)
 import System.Environment (lookupEnv)
+import qualified System.FilePath as FilePath
 
 import Centrinel (runCentrinel)
 import Centrinel.Report (OutputMethod, withOutputMethod, presentReport, report)
-import Centrinel.System.RunLikeCC (runLikeCC, RunLikeCC(..), ParsedCC(..))
+import Centrinel.System.RunLikeCC (runLikeCC, CppArgs, cppArgsInputFile, RunLikeCC(..), ParsedCC(..))
 import qualified Centrinel.Util.Datafiles as HGData
 import qualified Centrinel.Util.CompilationDatabase as CDB
 
@@ -41,6 +43,7 @@ data CentrinelOptions = CentrinelOptions {
   compilerCentrinelOpt :: Maybe FilePath
   -- | How to present the analysis results
   , outputCentrinelOpt :: OutputMethod
+  , excludeDirsCentrinelOpt :: [FilePath]
   }
 
 -- | Run the main computation
@@ -57,6 +60,7 @@ main cmd =
   case cmd of
     RunOneCentrinelCmd options args -> do
       gcc <- liftM newGCC (getCC options)
+      excludeDirs <- traverse Dir.makeAbsolute (excludeDirsCentrinelOpt options)
       cppArgs <- case runLikeCC gcc args of
         NoInputFilesCC -> exitSuccess -- nothing to do
         ErrorParsingCC err -> do
@@ -68,6 +72,10 @@ main cmd =
             putStrLn "Ignored args:"
             mapM_ (putStrLn . ("\t"++)) ignoredArgs
           putStrLn (showCppArgs cppArgs)
+          ignore <- excludeAnalysis excludeDirs cppArgs
+          when ignore $ do
+            putStrLn "File excluded from analysis"
+            exitSuccess
           return cppArgs
       datafiles <- HGData.getDatafiles
       res <- report (outputCentrinelOpt options) (runCentrinel datafiles gcc cppArgs)
@@ -76,6 +84,7 @@ main cmd =
         Just _ -> exitSuccess
     RunProjectCentrinelCmd options fp -> do
       gcc <- liftM newGCC (getCC options)
+      excludeDirs <- traverse Dir.makeAbsolute (excludeDirsCentrinelOpt options)
       datafiles <- HGData.getDatafiles
       putStrLn $ "Project is: '" ++ fp  ++ "'"
       cdb <- do
@@ -97,10 +106,18 @@ main cmd =
             when (not $ null ignoredArgs) $ do
               putStrLn "Ignored args:"
               mapM_ (putStrLn . ("\t"++)) ignoredArgs
-            putStrLn (showCppArgs cppArgs)
-            result <- runExceptT (runCentrinel datafiles gcc cppArgs)
-            _ <- presentReport present result
-            return ()
+            ignoreArtifact <- excludeAnalysis excludeDirs cppArgs
+            if ignoreArtifact
+              then
+              do
+                putStrLn "in excluded directory, skipping"
+                return ()
+              else
+              do
+                putStrLn (showCppArgs cppArgs)
+                result <- runExceptT (runCentrinel datafiles gcc cppArgs)
+                _ <- presentReport present result
+                return ()
 
 
 -- | Look for "REAL_CC" environment variable and return that path, if unset, return "cc"
@@ -114,3 +131,16 @@ getCC options =
     checkOpt = return $ First $ compilerCentrinelOpt options
     checkEnv :: IO (First FilePath)
     checkEnv = First <$> lookupEnv "REAL_CC"
+
+-- | @excludeAnalysis dirs cppArgs@ returns 'True' iff the 'inputFile' from the
+-- given CPP args is in one of the excluded directories (or a
+-- subdirectory). The directories @dirs@ are assumed to be absolute the
+-- inputfile in @cppArgs@ may be absolute or relative to the current working
+-- directory.
+excludeAnalysis :: [FilePath] -> CppArgs -> IO Bool
+excludeAnalysis excludeDirs cppArgs = do
+  absoluteInput <- Dir.makeAbsolute (cppArgsInputFile cppArgs)
+  let inputDirComponents = FilePath.splitDirectories absoluteInput
+      excludeDirComponents = map FilePath.splitDirectories excludeDirs
+      inputExcludedByDir d = d `L.isPrefixOf` inputDirComponents
+  return (any inputExcludedByDir excludeDirComponents)

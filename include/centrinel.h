@@ -55,6 +55,13 @@
  * definitions.
  */
 #ifdef __GNUC__
+int __builtin_ctzl (unsigned long l);
+int __builtin_isnan (double d);
+int __builtin_isfinite (double d);
+int __builtin_popcount (unsigned int i);
+int __builtin_popcountll (unsigned long long ll);
+int __builtin_signbit (double d);
+int __builtin_signbitf (float f);
 /* FIXME: want size_t return here, but can't include any system
  * header, and language-c internally has size_t as int in the semantic
  * pass, but not in the lexer.  If language-c ever changes how it

@@ -162,6 +162,19 @@ to run the preprocessor, or `cc` if unset.  Another way to specify the compiler
 is using the `--use-cc CC` option which takes precedence over the environment
 variable.
 
+## Specifying a JSON output format ##
+
+**Experimental**: with `--format json` Centrinel will write analysis results as
+a JSON blob (whose format is quite in flux at the moment).  The blob may be
+consumed with, for example
+[centrinel-report](https://github.com/lambdageek/centrinel-report)
+
+## Excluding directories from analysis ##
+
+With `--exclude DIR` (which may be specified multiple times), any input files
+that are in `DIR` or one of its subdirectories will not be analyzed.  (Works
+both with `-- CFLAGS CFILE` mode and with `--project JSON_FILE`).
+
 ## What works ##
 
 * Region annotations on struct definitions (specified by

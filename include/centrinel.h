@@ -59,9 +59,8 @@
  * header, and language-c internally has size_t as int in the semantic
  * pass, but not in the lexer.  If language-c ever changes how it
  * handles size_t, this may need to change. */
-int __bulitin_strlen (const char *s); 
+int __builtin_strlen (const char *s);
+void __builtin_unreachable (void);
 #endif /*__GNUC__*/
-
-
 
 #endif

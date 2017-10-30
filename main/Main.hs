@@ -12,10 +12,13 @@ theParser :: ParserInfo Centrinel.Main.CentrinelCmd
 theParser =
   let
     commonOptions :: Parser Centrinel.Main.CentrinelOptions
-    commonOptions = Centrinel.Main.CentrinelOptions <$> useCCOption <*> outputMethodOptions
+    commonOptions = Centrinel.Main.CentrinelOptions <$> useCCOption <*> outputMethodOptions <*> excludeDirOption
 
     useCCOption :: Parser (Maybe FilePath)
     useCCOption = optional $ strOption (long "use-cc" <> metavar "CC" <> help "Use the given C compiler for preprocessing (Default: REAL_CC environment value or 'cc' if unset)")
+
+    excludeDirOption :: Parser [FilePath]
+    excludeDirOption = many $ strOption (long "exclude" <> metavar "DIR" <> help "Don't scan files in the given directory.  May be specified several times.")
 
     runProject :: Parser (Centrinel.Main.CentrinelOptions -> Centrinel.Main.CentrinelCmd)
     runProject = flip Centrinel.Main.RunProjectCentrinelCmd <$> strOption (long "project" <> help "Run the analysis on every file in the compilation database JSON_FILE" <> metavar "JSON_FILE")

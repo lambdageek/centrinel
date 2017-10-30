@@ -8,6 +8,7 @@ module Centrinel.System.RunLikeCC (
   , runLikeCC
   -- * Utilities
   , anySourceArgs
+  , cppArgsInputFile
   -- * Re-exported definitons
   , Preprocessor
   , GCC
@@ -19,6 +20,7 @@ import qualified Data.List
 import Data.Monoid (Any(..))
 
 import Language.C.System.Preprocess (Preprocessor(..), CppArgs)
+import qualified Language.C.System.Preprocess as Cpp
 import Language.C.System.GCC (GCC, newGCC)
 
 
@@ -61,6 +63,9 @@ prefilterCCArgs = Data.List.partition isProblem
     predicates =
       [(Data.List.isPrefixOf "-g", "-ggdb3 leaves #defines in preprocessor output")
       ]
+
+cppArgsInputFile :: CppArgs -> FilePath
+cppArgsInputFile = Cpp.inputFile
 
 -- | Returns @Any True@ iff any of the given strings looks like a source file.
 -- It uses a pretty rough heuristic: the string must not begin with a @'-'@ and

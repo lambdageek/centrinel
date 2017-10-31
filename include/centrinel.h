@@ -19,6 +19,20 @@
 /* attribute specifier for above */
 #define __CENTRINEL_MANAGED_ATTR __attribute__((__CENTRINEL_MANAGED_REGION))
 
+/* Work around language-c 0.7 issue #32
+ * (https://github.com/visq/language-c/issues/32) we can't parse
+ * attributes on empty statements yet
+ * (https://gcc.gnu.org/onlinedocs/gcc/Attribute-Syntax.html#Statement-Attributes-2).
+ * So hang the attribute on a dummy label instead.
+ */
+#define ___CENTRINEL__LABEL_(n) ___centrinel_label_dummy##n
+#define ___CENTRINEL__LABEL(n) ___CENTRINEL__LABEL_(n):
+
+#define __CENTRINEL_SUPPRESS_SCOPE(b) ___CENTRINEL__LABEL(__LINE__) __attribute__((__suppress(b))) ;
+#define __CENTRINEL_UNSUPPRESS(expr) ({ __CENTRINEL_SUPPRESS_SCOPE(0) (expr); })
+#define __CENTRINEL_SUPPRESS(expr) ({ __CENTRINEL_SUPPRESS_SCOPE(1) (expr); })
+
+
 #ifdef __CENTRINEL_HACK_SYNC_ATOMICS
 
 /* complete list is here https://gcc.gnu.org/onlinedocs/gcc/_005f_005fsync-Builtins.html */

@@ -29,6 +29,8 @@ library
                        Centrinel.InRepl,
                        Centrinel.Types,
                        Centrinel.Report,
+                       Centrinel.Report.Json,
+                       Centrinel.Report.Types,
                        Centrinel.Warning,
                        Centrinel.Trav,
                        Centrinel.Region.Region,

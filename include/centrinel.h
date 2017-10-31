@@ -55,19 +55,32 @@
  * definitions.
  */
 #ifdef __GNUC__
+typedef __int128 __int128_t;
+typedef __int128 int128_t;
+typedef unsigned __int128 __uint128_t;
+
 int __builtin_ctzl (unsigned long l);
+int __builtin_ffsll (long long ll);
 int __builtin_isnan (double d);
 int __builtin_isfinite (double d);
+/* https://gcc.gnu.org/onlinedocs/gcc/Other-Builtins.html says this function is
+ * varargs although it only really takes a single argument
+ * int __builtin_isinf_sign (...);
+ * but language-c doesn't like varargs functions with 0 normal parameters.
+ */
+int __builtin_isinf_sign (double d);
 int __builtin_popcount (unsigned int i);
 int __builtin_popcountll (unsigned long long ll);
 int __builtin_signbit (double d);
 int __builtin_signbitf (float f);
+int __builtin_signbitl (long double ld);
 /* FIXME: want size_t return here, but can't include any system
  * header, and language-c internally has size_t as int in the semantic
  * pass, but not in the lexer.  If language-c ever changes how it
  * handles size_t, this may need to change. */
 int __builtin_strlen (const char *s);
 void __builtin_unreachable (void);
+void __builtin_unwind_init (void);
 #endif /*__GNUC__*/
 
 #endif

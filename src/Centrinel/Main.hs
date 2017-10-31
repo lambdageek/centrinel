@@ -60,7 +60,7 @@ main cmd =
   case cmd of
     RunOneCentrinelCmd options args -> do
       gcc <- liftM newGCC (getCC options)
-      excludeDirs <- traverse Dir.makeAbsolute (excludeDirsCentrinelOpt options)
+      excludeDirs <- traverse Dir.canonicalizePath (excludeDirsCentrinelOpt options)
       cppArgs <- case runLikeCC gcc args of
         NoInputFilesCC -> exitSuccess -- nothing to do
         ErrorParsingCC err -> do
@@ -84,7 +84,7 @@ main cmd =
         Just _ -> exitSuccess
     RunProjectCentrinelCmd options fp -> do
       gcc <- liftM newGCC (getCC options)
-      excludeDirs <- traverse Dir.makeAbsolute (excludeDirsCentrinelOpt options)
+      excludeDirs <- traverse Dir.canonicalizePath (excludeDirsCentrinelOpt options)
       datafiles <- HGData.getDatafiles
       putStrLn $ "Project is: '" ++ fp  ++ "'"
       cdb <- do
@@ -139,7 +139,7 @@ getCC options =
 -- directory.
 excludeAnalysis :: [FilePath] -> CppArgs -> IO Bool
 excludeAnalysis excludeDirs cppArgs = do
-  absoluteInput <- Dir.makeAbsolute (cppArgsInputFile cppArgs)
+  absoluteInput <- Dir.canonicalizePath (cppArgsInputFile cppArgs)
   let inputDirComponents = FilePath.splitDirectories absoluteInput
       excludeDirComponents = map FilePath.splitDirectories excludeDirs
       inputExcludedByDir d = d `L.isPrefixOf` inputDirComponents

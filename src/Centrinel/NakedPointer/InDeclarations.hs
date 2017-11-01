@@ -18,6 +18,7 @@ import qualified Language.C.Data.Node as C
 import Centrinel.Control.Monad.Class.RegionResult
 
 import Centrinel.NakedPointer.Env
+import Centrinel.NakedPointer.FindSuppressAttribute (findSuppressInSemAttrList)
 import Centrinel.NakedPointer.Utils
 import Centrinel.NakedPointerError (NPEPosn(..)
                                    , NPEVictims
@@ -102,7 +103,14 @@ nakedPtrCheckDecl dcl = do
   let
     initialEnv :: AnalysisEnv
     initialEnv = AnalysisEnv (NPEDecl $ C.declName dcl) False
-  npes <- execWriterT $ flip runReaderT initialEnv $ nakedPointers (C.declType dcl)
-  return $ case npes of
-    [] -> Nothing
-    _ ->  Just $ mkNakedPointerError (C.nodeInfo dcl) npes
+  case findSuppressAttributeInDeclAttrs (C.declAttrs dcl) of
+    Just True -> return Nothing
+    _ -> do
+      npes <- execWriterT $ flip runReaderT initialEnv $ nakedPointers (C.declType dcl)
+      return $ case npes of
+        [] -> Nothing
+        _ ->  Just $ mkNakedPointerError (C.nodeInfo dcl) npes
+
+findSuppressAttributeInDeclAttrs :: C.DeclAttrs -> Maybe Bool
+findSuppressAttributeInDeclAttrs (C.DeclAttrs _fspecs _storage attrs) =
+  findSuppressInSemAttrList attrs

@@ -2,7 +2,7 @@
 {-# language DefaultSignatures #-}
 module Centrinel.NakedPointer.InDefinitions (nakedPtrCheckDefn) where
 
-import Control.Monad (MonadPlus(..))
+import Control.Applicative
 import Control.Monad.Reader.Class
 import Control.Monad.Reader (runReaderT)
 import Control.Monad.Writer.Class
@@ -17,9 +17,7 @@ import qualified Language.C.Analysis.DefTable as CDT
 import qualified Language.C.Analysis.SemRep as C
 import qualified Language.C.Analysis.TravMonad as CM
 import qualified Language.C.Data.Node as C
-import qualified Language.C.Data.Ident as C
 import qualified Language.C.Syntax.AST as CStx
-import qualified Language.C.Syntax.Constants as CStx
 
 import Language.C.Analysis.TravMonad.Instances ()
 
@@ -27,6 +25,7 @@ import Centrinel.Control.Monad.Class.RegionResult
 import Centrinel.Control.Monad.LocalSymtab (evalLocalSymtabT)
 
 import Centrinel.NakedPointer.Env
+import Centrinel.NakedPointer.FindSuppressAttribute (findSuppressInCAttrList)
 import Centrinel.NakedPointer.InDeclarations
 import Centrinel.NakedPointer.Utils
 import Centrinel.NakedPointerError (NPEPosn(..), NPEVictims, NakedPointerError, mkNakedPointerError)
@@ -219,26 +218,13 @@ inBlockScope = around CM.enterBlockScope CM.leaveBlockScope
 
 -- | Find the statement @dummyLabel: __attribute__((__suppress([01]))) ;@ at the beginning of the given list of
 -- block items.
-findSuppressPragma :: [CStx.CBlockItem] -> Maybe Bool
+findSuppressPragma :: Alternative f => [CStx.CBlockItem] -> f Bool
 findSuppressPragma items =
   case items of
-    (CStx.CBlockStmt (CStx.CLabel _id (CStx.CExpr Nothing _exprNi) [labelAttr] _ni) : _)
-      -> findSuppressAttribute labelAttr
-    _ -> mzero
-
-findSuppressAttribute :: CStx.CAttr -> Maybe Bool
-findSuppressAttribute attr =
-  case attr of
-    (CStx.CAttr ident [CStx.CConst (CStx.CIntConst i _constNi)] _ni)
-      | isSuppress ident
-        -> case CStx.getCInteger i of
-             0 -> return False
-             1 -> return True
-             _ -> mzero
-    _ -> mzero
-
-isSuppress:: C.Ident -> Bool
-isSuppress ident = C.identToString ident == "__suppress"
+    (CStx.CBlockStmt (CStx.CLabel _id (CStx.CExpr Nothing _exprNi) labelAttrs _ni) : _)
+      -> findSuppressInCAttrList labelAttrs
+    _ -> empty
+{-# Specialize findSuppressPragma :: [CStx.CBlockItem] -> Maybe Bool #-}
 
 nakedPtrCheckDefn :: (RegionResultMonad m, CM.MonadTrav m) => C.FunDef -> m (Maybe NakedPointerError)
 nakedPtrCheckDefn defn = do

@@ -49,6 +49,7 @@ library
                        Control.Unification.IntVar.Extras,
                        Centrinel.NakedPointer,
                        Centrinel.NakedPointer.Env,
+                       Centrinel.NakedPointer.FindSuppressAttribute,
                        Centrinel.NakedPointer.InDeclarations,
                        Centrinel.NakedPointer.InDefinitions,
                        Centrinel.NakedPointer.PointerRegionScheme,

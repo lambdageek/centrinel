@@ -10,6 +10,7 @@ import Language.C.Data.Error (CError)
 data CentrinelError =
   CentCPPError !System.Exit.ExitCode -- ^ Error while invoking the C preprocessor
   | CentParseError !ParseError -- ^ Error while parsing the input C file
-  | CentAnalysisError ![CentrinelAnalysisError] -- ^ Error reports from Centrinel analyses
+  -- | Error reports from Centrinel when analysis of a translation unit was aborted.
+  | CentAbortedAnalysisError ![CentrinelAnalysisError]
 
 type CentrinelAnalysisError = CError

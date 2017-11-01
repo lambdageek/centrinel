@@ -61,7 +61,7 @@ data NPEPosn = NPEArg !Int !C.VarName !C.NodeInfo !NPEPosn -- function argument 
   | NPETypeOfExpr !C.NodeInfo  !NPEPosn -- in the type of the expression
 
 mkNakedPointerError :: C.NodeInfo -> [NPEVictim] -> NakedPointerError
-mkNakedPointerError ni npes = NakedPointerError ni npes Err.LevelError
+mkNakedPointerError ni npes = NakedPointerError ni npes Err.LevelWarn
 
 instance Err.Error NakedPointerError where
   errorInfo (NakedPointerError ni victims lvl) = Err.mkErrorInfo lvl msg ni

@@ -30,7 +30,12 @@ class ApplyUnificationState m where
 newtype UnifyRegT m a = UnifyRegT { unUnifyRegT :: U.IntBindingT RegionTerm m a}
   deriving (Functor, Applicative, Monad, MonadTrans)
 
+instance C.MonadName m => C.MonadName (UnifyRegT m) where
+  genName = UnifyRegT $ lift $ C.genName
 
+instance C.MonadSymtab m => C.MonadSymtab (UnifyRegT m) where
+  getDefTable = UnifyRegT $ lift $ C.getDefTable
+  withDefTable = UnifyRegT . lift . C.withDefTable
 
 instance C.MonadCError m => C.MonadCError (UnifyRegT m) where
   throwTravError e = UnifyRegT $ lift $ C.throwTravError e

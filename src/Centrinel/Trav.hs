@@ -28,6 +28,7 @@ import Language.C.Data.Error (CError)
 
 import Language.C.Analysis.SemRep (DeclEvent)
 import qualified Language.C.Analysis.TravMonad as AM
+import Language.C.Analysis.TravMonad.Instances ()
 
 import qualified Centrinel.Region.Ident as HGId
 import qualified Centrinel.Region.Unification as U
@@ -42,17 +43,17 @@ newtype HGTrav s a = HGTrav { unHGTrav :: ReaderT (HGAnalysis s) (StateT RegionI
   deriving (Functor, Applicative, Monad)
 
 instance AM.MonadName (HGTrav s) where
-  genName = HGTrav $ lift $ lift $ lift $ AM.genName
+  genName = HGTrav AM.genName
 
 instance AM.MonadSymtab (HGTrav s) where
-  getDefTable = HGTrav $ lift $ lift $ lift AM.getDefTable
-  withDefTable = HGTrav . lift . lift . lift . AM.withDefTable
+  getDefTable = HGTrav AM.getDefTable
+  withDefTable = HGTrav . AM.withDefTable
 
 instance AM.MonadCError (HGTrav s) where
-  throwTravError = HGTrav . lift . lift . lift . AM.throwTravError
-  catchTravError (HGTrav c) handler = HGTrav (Reader.liftCatch (State.liftCatch (U.liftCatch AM.catchTravError)) c (unHGTrav . handler))
-  recordError = HGTrav . lift . lift . lift . AM.recordError
-  getErrors = HGTrav $ lift $ lift $ lift AM.getErrors
+  throwTravError = HGTrav . AM.throwTravError
+  catchTravError (HGTrav c) handler = HGTrav (AM.catchTravError c (unHGTrav . handler))
+  recordError = HGTrav . AM.recordError
+  getErrors = HGTrav $ AM.getErrors
 
 instance U.RegionUnification U.RegionVar (HGTrav s) where
   newRegion = HGTrav $ lift $ lift U.newRegion

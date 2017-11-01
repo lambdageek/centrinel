@@ -28,7 +28,35 @@
 #define ___CENTRINEL__LABEL_(n) ___centrinel_label_dummy##n
 #define ___CENTRINEL__LABEL(n) ___CENTRINEL__LABEL_(n):
 
-#define __CENTRINEL_SUPPRESS_SCOPE(b) ___CENTRINEL__LABEL(__LINE__) __attribute__((__suppress(b))) ;
+/* Centrinel's __suppress(1) attribute may be used to temporarily disable checking for raw pointers into
+ * __CENTRINEL_MANAGED_REGION in the following circumstances:
+ *
+ * - If the attribute is applied to a label at the beginning of a compound
+ *   statement (a block), checking is suppressed in the block.  Checking may be
+ *   re-enabled on subparts of the suppressed scope with __suppress(0).
+ *
+ * - If the attribute is applied to a declaration (for example a function
+ *   declaration), no warning will be elicited by the declaration.  (Note
+ *   however that if the declaration is a function, the call site may still
+ *   elicit warnings for the actual arguments.)  Applying the attribute to a
+ *   declaration is primarily useful to provide deprecated legacy raw pointer
+ *   APIs that are not expected to be called.
+ */
+#define __CENTRINEL_SUPPRESS_ATTR(b) __attribute__((__suppress(b)))
+#define __CENTRINEL_SUPPRESS_SCOPE(b) ___CENTRINEL__LABEL(__LINE__) __CENTRINEL_SUPPRESS_ATTR(b) ;
+/* These helper macros expand to GNU C statement expressions - they may be
+ * useful to suppress/unsuppress checking of individual expressions.  This is
+ * particularly useful in macros to suppress checking the macro body, but
+ * re-enable checking of the arguments:
+ *
+ * For example:
+ *
+ *     #define SAFE_ACCESS(expr) __CENTRINEL_SUPPRESS(some_safe_access (__CENTRINEL_UNSUPPRESS(expr)->unsafe_field))
+ *
+ *  If expr returns a safely wrapped raw pointer, accessing the unsafe_field
+ *  would normally elicit a warning which is suppressed.  The argument "expr"
+ *  however will still be checked when the macro is used.
+ */
 #define __CENTRINEL_UNSUPPRESS(expr) ({ __CENTRINEL_SUPPRESS_SCOPE(0) (expr); })
 #define __CENTRINEL_SUPPRESS(expr) ({ __CENTRINEL_SUPPRESS_SCOPE(1) (expr); })
 

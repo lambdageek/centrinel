@@ -49,6 +49,8 @@ struct XPayload {
 
 typedef struct XPayload *XHandle;
 
+extern RT_KNOWN int legacy_x (X* use);
+
 /* Work around language-c 0.7 issue #32
  * (https://github.com/visq/language-c/issues/32) we can't parse
  * attributes on empty statements yet

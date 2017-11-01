@@ -6,7 +6,7 @@ import Language.C.Parser (parseC)
 
 import Language.C.Syntax.AST (CTranslUnit)
 
-import Language.C.Data.Error (CError, changeErrorLevel, ErrorLevel(LevelWarn))
+import Language.C.Data.Error (changeErrorLevel, ErrorLevel(LevelWarn))
 import Language.C.Data.Position (initPos)
 
 import Language.C.System.GCC (GCC)
@@ -56,15 +56,15 @@ inferRegions u = do
   g <- HG.withHGAnalysis (nonFatal . HG.inferDeclEvent) $ A.analyseAST u
   regions <- getInferredRegions g
   return (g, regions)
-  where
-    -- catch any errors due to this declaration, record them and continue.
-    nonFatal :: A.MonadCError m => m () -> m ()
-    nonFatal comp = A.catchTravError comp (\e -> A.recordError $ changeErrorLevel e LevelWarn)
 
-think :: Monad m => NP.AnalysisOpts -> CTranslUnit -> ExceptT CentrinelError m ((A.GlobalDecls, RegionInferenceResult), [CError])
-think npOpts u = withExceptT CentAnalysisError $ HG.evalHGTrav $ do
+-- | Catch any errors due to the given computation, record them as warnings and continue.
+nonFatal :: A.MonadCError m => m () -> m ()
+nonFatal comp = A.catchTravError comp (\e -> A.recordError $ changeErrorLevel e LevelWarn)
+
+think :: Monad m => NP.AnalysisOpts -> CTranslUnit -> ExceptT CentrinelError m ((A.GlobalDecls, RegionInferenceResult), [CentrinelAnalysisError])
+think npOpts u = withExceptT CentAbortedAnalysisError $ HG.evalHGTrav $ do
   grir@(g,rir) <- inferRegions u
-  NP.runInferenceResultT (NP.analyze npOpts $ A.gObjs g) (A.gTypeDefs g) rir
+  NP.runInferenceResultT (nonFatal $ NP.analyze npOpts $ A.gObjs g) (A.gTypeDefs g) rir
   return grir
 
 -- | Run the preprocessor with the given arguments, parse the result and run

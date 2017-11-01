@@ -8,6 +8,7 @@ module Centrinel.Control.Monad.InferenceResult (
 
 
 import Control.Monad.Reader (runReaderT, ReaderT, asks)
+import qualified Control.Monad.Trans.Reader as Reader
 import Control.Monad.Trans.Class (MonadTrans(..))
 
 import qualified Data.Map as Map
@@ -15,6 +16,7 @@ import qualified Data.Map as Map
 import qualified Language.C.Data.Ident as C
 import qualified Language.C.Analysis.SemRep as C
 import qualified Language.C.Analysis.TravMonad as CM
+import Language.C.Analysis.TravMonad.Instances ()
 
 import Centrinel.Control.Monad.Class.RegionResult
 import Centrinel.Region.Region (RegionScheme(..))
@@ -27,7 +29,7 @@ newtype InferenceResultT m a = InferenceResultT { unInferenceResultT :: ReaderT 
 
 instance CM.MonadCError m => CM.MonadCError (InferenceResultT m) where
   throwTravError = InferenceResultT . lift . CM.throwTravError
-  catchTravError = error "finish catchTravError for InferenceResultT" -- FIXME: finish me
+  catchTravError (InferenceResultT c) handler = InferenceResultT (CM.catchTravError c (unInferenceResultT . handler))
   recordError = InferenceResultT . lift . CM.recordError
   getErrors = InferenceResultT $ lift $ CM.getErrors
   

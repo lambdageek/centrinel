@@ -22,7 +22,7 @@ import Centrinel.System.RunLikeCC (runLikeCC, CppArgs, cppArgsInputFile, RunLike
 import qualified Centrinel.Util.Datafiles as HGData
 import qualified Centrinel.Util.CompilationDatabase as CDB
 
-import Language.C.System.GCC (newGCC)
+import Language.C.System.GCC (newGCC, GCC)
 
 import Centrinel.Debug.PrettyCppArgs (showCppArgs)
 
@@ -59,8 +59,7 @@ main :: CentrinelCmd -> IO ()
 main cmd =
   case cmd of
     RunOneCentrinelCmd options args -> do
-      gcc <- liftM newGCC (getCC options)
-      excludeDirs <- traverse Dir.canonicalizePath (excludeDirsCentrinelOpt options)
+      (gcc, excludeDirs, datafiles) <- prepareEnvironment options
       cppArgs <- case runLikeCC gcc args of
         NoInputFilesCC -> exitSuccess -- nothing to do
         ErrorParsingCC err -> do
@@ -77,15 +76,12 @@ main cmd =
             putStrLn "File excluded from analysis"
             exitSuccess
           return cppArgs
-      datafiles <- HGData.getDatafiles
       res <- report (outputCentrinelOpt options) (runCentrinel datafiles gcc cppArgs)
       case res of
         Nothing -> exitFailure
         Just _ -> exitSuccess
     RunProjectCentrinelCmd options fp -> do
-      gcc <- liftM newGCC (getCC options)
-      excludeDirs <- traverse Dir.canonicalizePath (excludeDirsCentrinelOpt options)
-      datafiles <- HGData.getDatafiles
+      (gcc, excludeDirs, datafiles) <- prepareEnvironment options
       putStrLn $ "Project is: '" ++ fp  ++ "'"
       cdb <- do
         res <- CDB.parseCompilationDatabase <$> B.readFile fp
@@ -118,6 +114,14 @@ main cmd =
                 result <- runExceptT (runCentrinel datafiles gcc cppArgs)
                 _ <- presentReport present result
                 return ()
+
+
+prepareEnvironment :: CentrinelOptions -> IO (GCC, [FilePath], HGData.Datafiles)
+prepareEnvironment options = do
+  gcc <- liftM newGCC (getCC options)
+  excludeDirs <- traverse Dir.canonicalizePath (excludeDirsCentrinelOpt options)
+  datafiles <- HGData.getDatafiles
+  return (gcc, excludeDirs, datafiles)
 
 
 -- | Look for "REAL_CC" environment variable and return that path, if unset, return "cc"

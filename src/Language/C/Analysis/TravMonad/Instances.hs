@@ -3,6 +3,7 @@
 module Language.C.Analysis.TravMonad.Instances () where
 
 import qualified Control.Monad.Trans.Reader as Rd
+import qualified Control.Monad.Trans.State.Lazy as StL
 import qualified Control.Monad.Trans.Writer.Lazy as WrL
 import Control.Monad.Trans (MonadTrans (..))
 
@@ -41,3 +42,19 @@ instance (Monoid w, MonadSymtab m) => MonadSymtab (WrL.WriterT w m) where
 
 instance (Monoid w, MonadTrav m) => MonadTrav (WrL.WriterT w m) where
   handleDecl = lift . handleDecl
+
+instance MonadName m => MonadName (StL.StateT s m) where
+  genName = lift genName
+
+instance MonadSymtab m => MonadSymtab (StL.StateT s m) where
+  getDefTable = lift getDefTable
+  withDefTable = lift . withDefTable
+
+instance MonadTrav m => MonadTrav (StL.StateT s m) where
+  handleDecl = lift . handleDecl
+
+instance MonadCError m => MonadCError (StL.StateT s m) where
+  throwTravError = lift . throwTravError
+  catchTravError = StL.liftCatch catchTravError
+  recordError = lift . recordError
+  getErrors = lift getErrors

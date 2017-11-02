@@ -29,7 +29,7 @@ assertRunsTestCase fp = testCase (fp ++ " runs") cmd
     cmd = do
       case runLikeCC gcc [fp] of
         ParsedCC args [] -> do
-          ec <- C.report C.defaultOutputMethod $ C.runCentrinel datafiles gcc args
+          ec <- C.report C.defaultOutputMethod fp $ C.runCentrinel datafiles gcc args
           assertEqual "exit code" (Just ()) (const () <$> ec) -- throw away analysis results
         NoInputFilesCC -> assertFailure $ "expected input files in smoketest " ++ fp
         ErrorParsingCC err -> assertFailure $ "unexpected parse error \"" ++ err ++ "\" in smoketest " ++ fp

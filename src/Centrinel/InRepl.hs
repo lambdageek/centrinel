@@ -27,7 +27,7 @@ pp = print . P.pretty
 -- >>> let opts = makeNakedPointerOpts fp
 -- >>> think' opts fp
 think' :: NP.AnalysisOpts -> FilePath -> IO (Maybe (A.GlobalDecls, RegionInferenceResult))
-think' npOpts fp = report defaultOutputMethod (inp >>= think npOpts)
+think' npOpts fp = report defaultOutputMethod fp (inp >>= think npOpts)
   where
     inp :: ExceptT CentrinelError IO CTranslUnit
     inp = parseCFile (newGCC "cc") cpp_args

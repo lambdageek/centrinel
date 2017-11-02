@@ -1,10 +1,29 @@
-{-# language DeriveGeneric, OverloadedStrings #-}
-module Centrinel.Report where
+{-# language DeriveGeneric, DeriveFunctor, DefaultSignatures,
+      GeneralizedNewtypeDeriving, OverloadedStrings,
+      RankNTypes, ScopedTypeVariables, UndecidableInstances
+  #-}
+module Centrinel.Report (
+  -- * Output methods
+  OutputMethod(..), OutputFormat(..), OutputDestination(..)
+  , defaultOutputMethod
+  -- * Output-able computations
+  , MonadOutputMethod(..)
+  -- * Running output-able computations
+  , withOutputMethod
+  -- * Reporting
+  , presentReport, report
+  ) where
 
 import qualified System.IO as IO
+import Control.Monad (unless, when)
 import Control.Exception (bracket_)
-import Control.Monad.Except
+import Control.Monad.Trans.Class
+import Control.Monad.Trans.Control
+import Control.Monad.Trans.Except
+import Control.Monad.Trans.Reader
+import Control.Monad.IO.Class
 import Data.Monoid ((<>))
+import qualified System.Directory as Dir
 
 import Centrinel.Types
 import Centrinel.Report.Types
@@ -18,48 +37,85 @@ data OutputMethod = OutputMethod
 
 -- | How to present the output
 data OutputFormat =
+  -- | Present the output in plain text
   PlainTextOutputFormat
+  -- | Present the output as a JSON blob
   | JSONOutputFormat
 
+-- | Where to send the output
 data OutputDestination =
+  -- | Send output to 'IO.stdout'
   StdOutOutputDestination
+  -- | Send output to a file with the given 'FilePath'
   | FilePathOutputDestination FilePath
 
 -- | Default output method is plain text on stdOut
 defaultOutputMethod :: OutputMethod
 defaultOutputMethod = OutputMethod StdOutOutputDestination PlainTextOutputFormat
 
-report :: OutputMethod -> ExceptT CentrinelError IO (a, [CentrinelAnalysisError]) -> IO (Maybe a)
-report output comp = do
+report :: OutputMethod -> FilePath -> ExceptT CentrinelError IO (a, [CentrinelAnalysisError]) -> IO (Maybe a)
+report output fp comp = do
   x <- runExceptT comp
-  withOutputMethod output $ \present -> presentReport present x
+  withOutputMethod output $ presentReport fp x
 
-presentReport :: OutputFn -> Either CentrinelError (a, [CentrinelAnalysisError]) -> IO (Maybe a)
-presentReport present x =
+-- | This monad provides operations for working with the reporting monad.
+class Monad m => MonadOutputMethod m where
+  -- | Emit a message to the report about the given file
+  present :: FilePath -> Message -> m ()
+  -- | Change to the given directory, run the given computation and then
+  -- restore the working directory.
+  -- The default version of this method uses 'Dir.withWorkingDirectory' provided the monad is an instance of @'MonadBaseControl' IO m@
+  withWorkingDirectory :: FilePath -> m a -> m a
+  default withWorkingDirectory :: MonadBaseControl IO m => FilePath -> m a -> m a
+  withWorkingDirectory fp comp = liftBaseOp_ (Dir.withCurrentDirectory fp) comp
+  {-# minimal present #-}
+
+-- | Given either a successful @(x, warns)@ or failing @errors@, @presentReport
+-- result@ will 'present' the errors or warnings and return @Just x@ or @Nothing@.
+presentReport :: MonadOutputMethod m => FilePath -> Either CentrinelError (a, [CentrinelAnalysisError]) -> m (Maybe a)
+presentReport fp x =
   case x of
     Left centErr -> do
-      present (Abnormal centErr)
+      present fp (Abnormal centErr)
       return Nothing
     Right (a, warns) -> do
-      present (Normal warns)
+      present fp (Normal warns)
       return (Just a)
 
-type OutputFn = Message -> IO ()
+type OutputFn = FilePath -> Message -> IO ()
 
-withOutputMethod :: OutputMethod -> (OutputFn -> IO a) -> IO a
+-- | A monad transformer that adds a 'MonadOutputMethod' to a monad stack.
+newtype OutputMethodT m a = OutputMethodT { unOutputMethodT :: ReaderT OutputFn m a }
+  deriving (Functor, Applicative, Monad)
+
+instance MonadIO m => MonadIO (OutputMethodT m) where
+  liftIO m = OutputMethodT (liftIO m)
+
+instance (MonadBaseControl IO m, MonadIO m) => MonadOutputMethod (OutputMethodT m) where
+  present fp msg = OutputMethodT (ask >>= \f -> liftIO (f fp msg))
+  withWorkingDirectory fp comp = OutputMethodT $ liftBaseOp_ (Dir.withCurrentDirectory fp) (unOutputMethodT comp)
+
+instance MonadTrans OutputMethodT where
+  lift = OutputMethodT . lift
+
+runOutputMethodT :: OutputFn -> OutputMethodT IO a -> IO a
+runOutputMethodT outputFn m = runReaderT (unOutputMethodT m) outputFn
+
+-- | Runs the given polymorphic 'MonadOutputMethod' computation in
+-- an output monad that sends output via the given 'OutputMethod'
+withOutputMethod :: forall a . OutputMethod -> (forall m . (MonadIO m, MonadOutputMethod m) => m a) -> IO a
 withOutputMethod (OutputMethod dest fmt) =
-  let (acquire, release, present) = case fmt of
+  let (header, footer, pres) = case fmt of
         PlainTextOutputFormat -> (const (return ()), const (return ()), plainTextOutput)
         JSONOutputFormat -> (J.header, J.footer, J.output)
-      runKont isFile h kont =
-        bracket_ (acquire h) (release h) (kont $ present isFile h)
+      brak h = bracket_ (header h) (footer h)
   in case dest of
-    StdOutOutputDestination -> runKont False IO.stdout
+    StdOutOutputDestination -> \kont -> brak IO.stdout (runOutputMethodT (pres False IO.stdout) kont)
     FilePathOutputDestination fp -> \kont -> IO.withFile fp IO.AppendMode $ \h ->
-      runKont True h kont
+      brak h (runOutputMethodT (pres True h) kont)
 
-plainTextOutput :: Bool -> IO.Handle -> Message -> IO ()
-plainTextOutput isFile h = \msg ->
+plainTextOutput :: Bool -> IO.Handle -> FilePath -> Message -> IO ()
+plainTextOutput isFile h = \_fp msg ->
   case msg of
     Normal warns ->
       unless (null warns) $ do

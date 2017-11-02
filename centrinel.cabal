@@ -75,6 +75,7 @@ library
                        filepath >= 1.4.0.0,
                        language-c >= 0.7,
                        mtl >= 2.2.1,
+                       monad-control >= 1.0.0.3,
                        pretty >= 1.1.2.0,
                        text >=1.2.0.2,
                        transformers >= 0.5.2.0,

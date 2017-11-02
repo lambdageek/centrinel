@@ -5,7 +5,6 @@ import Control.Monad (when, liftM)
 import Control.Monad.Except (runExceptT)
 import Control.Monad.IO.Class (MonadIO(..))
 
-import Data.Either (isRight)
 import Data.Monoid (Monoid(..), First(..))
 import Data.Foldable (forM_)
 import qualified Data.List as L
@@ -18,9 +17,10 @@ import System.Exit (exitSuccess, exitFailure)
 import System.Environment (lookupEnv)
 import qualified System.FilePath as FilePath
 
-import Centrinel (runCentrinel)
+import Centrinel (parseCFile, cppArgsForCentrinel, makeNakedPointerOpts, think')
 import Centrinel.Report (OutputMethod, withOutputMethod, withWorkingDirectory,
-                         presentReport, MonadOutputMethod(..))
+                         MonadOutputMethod(..))
+import Centrinel.Report.Types (Message(..))
 import Centrinel.System.RunLikeCC (RunLikeCC(..)
                                   , CppArgs, cppArgsInputFile
                                   , runLikeCC, ParsedCC(..))
@@ -96,7 +96,8 @@ analyzeTranslationUnit :: (MonadIO m, MonadOutputMethod m)
                        -> RunLikeCC CDB.Invoke
                        -> m Bool
 analyzeTranslationUnit (gcc, excludeDirs, datafiles) compilation = do
-  let RunLikeCC {file, workingDirectory, artifact} = compilation
+  let RunLikeCC {file = file_, workingDirectory, artifact} = compilation
+      file = T.unpack file_
   withWorkingDirectory (T.unpack workingDirectory) $ do
     verboseDebugLn $ "Analyzing " ++ show file
     case runLikeCC gcc (T.unpack <$> CDB.invokeArguments artifact) of
@@ -116,11 +117,21 @@ analyzeTranslationUnit (gcc, excludeDirs, datafiles) compilation = do
             return True
           else
           do
-            liftIO $ putStrLn (showCppArgs cppArgs)
-            result <- liftIO $ runExceptT (runCentrinel datafiles gcc cppArgs)
-            _ <- presentReport result
-            return (isRight result)
-
+            verboseDebugLn (showCppArgs cppArgs)
+            mast <- liftIO $ runExceptT $ parseCFile gcc (cppArgsForCentrinel cppArgs datafiles)
+            case mast of
+              Left fatalErr -> do
+                present file (Abnormal fatalErr)
+                return False
+              Right ast ->
+                let opts = makeNakedPointerOpts (cppArgsInputFile cppArgs)
+                in case think' opts ast of
+                    Left err -> do
+                      present file (Abnormal err)
+                      return False
+                    Right (_, warns) -> do
+                      present file (Normal warns)
+                      return True
 
 prepareEnvironment :: CentrinelOptions -> IO (GCC, [ExcludedDir], HGData.Datafiles)
 prepareEnvironment options = do

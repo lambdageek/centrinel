@@ -1,6 +1,7 @@
 module Centrinel where
 
-import Control.Monad.Except (ExceptT(..), withExceptT)
+import Control.Monad.Except (ExceptT(..), runExceptT, withExceptT)
+import Control.Monad.Identity (runIdentity)
 
 import Language.C.Parser (parseC)
 
@@ -61,11 +62,21 @@ inferRegions u = do
 nonFatal :: A.MonadCError m => m () -> m ()
 nonFatal comp = A.catchTravError comp (\e -> A.recordError $ changeErrorLevel e LevelWarn)
 
+-- | Given a parsed translation unit and some options, infer the regions for
+-- all the pointers and then scan the declarations and definitions to find any
+-- uses of raw pointers into the managed region.  Throws a 'CentrinelError' if
+-- there was a fatal error, otherwise returns inference results and a list of
+-- non-fatal analysis errors.
 think :: Monad m => NP.AnalysisOpts -> CTranslUnit -> ExceptT CentrinelError m ((A.GlobalDecls, RegionInferenceResult), [CentrinelAnalysisError])
 think npOpts u = withExceptT CentAbortedAnalysisError $ HG.evalHGTrav $ do
   grir@(g,rir) <- inferRegions u
   NP.runInferenceResultT (nonFatal $ NP.analyze npOpts $ A.gObjs g) (A.gTypeDefs g) rir
   return grir
+
+-- | Same as 'think' but returns @Left err@ for a fatal error or @Right (res,
+-- warns)@ for a result and non-fatal warnings.
+think' :: NP.AnalysisOpts -> CTranslUnit -> Either CentrinelError ((A.GlobalDecls, RegionInferenceResult), [CentrinelAnalysisError])
+think' npOpts = runIdentity . runExceptT . think npOpts
 
 -- | Run the preprocessor with the given arguments, parse the result and run
 -- the Centrinel analysis.

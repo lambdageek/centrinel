@@ -53,15 +53,15 @@ data OutputDestination =
 defaultOutputMethod :: OutputMethod
 defaultOutputMethod = OutputMethod StdOutOutputDestination PlainTextOutputFormat
 
-report :: OutputMethod -> ExceptT CentrinelError IO (a, [CentrinelAnalysisError]) -> IO (Maybe a)
-report output comp = do
+report :: OutputMethod -> FilePath -> ExceptT CentrinelError IO (a, [CentrinelAnalysisError]) -> IO (Maybe a)
+report output fp comp = do
   x <- runExceptT comp
-  withOutputMethod output $ presentReport x
+  withOutputMethod output $ presentReport fp x
 
 -- | This monad provides operations for working with the reporting monad.
 class Monad m => MonadOutputMethod m where
-  -- | Emit a message to the report
-  present :: Message -> m ()
+  -- | Emit a message to the report about the given file
+  present :: FilePath -> Message -> m ()
   -- | Change to the given directory, run the given computation and then
   -- restore the working directory.
   -- The default version of this method uses 'Dir.withWorkingDirectory' provided the monad is an instance of @'MonadBaseControl' IO m@
@@ -72,17 +72,17 @@ class Monad m => MonadOutputMethod m where
 
 -- | Given either a successful @(x, warns)@ or failing @errors@, @presentReport
 -- result@ will 'present' the errors or warnings and return @Just x@ or @Nothing@.
-presentReport :: MonadOutputMethod m => Either CentrinelError (a, [CentrinelAnalysisError]) -> m (Maybe a)
-presentReport x =
+presentReport :: MonadOutputMethod m => FilePath -> Either CentrinelError (a, [CentrinelAnalysisError]) -> m (Maybe a)
+presentReport fp x =
   case x of
     Left centErr -> do
-      present (Abnormal centErr)
+      present fp (Abnormal centErr)
       return Nothing
     Right (a, warns) -> do
-      present (Normal warns)
+      present fp (Normal warns)
       return (Just a)
 
-type OutputFn = Message -> IO ()
+type OutputFn = FilePath -> Message -> IO ()
 
 -- | A monad transformer that adds a 'MonadOutputMethod' to a monad stack.
 newtype OutputMethodT m a = OutputMethodT { unOutputMethodT :: ReaderT OutputFn m a }
@@ -92,7 +92,7 @@ instance MonadIO m => MonadIO (OutputMethodT m) where
   liftIO m = OutputMethodT (liftIO m)
 
 instance (MonadBaseControl IO m, MonadIO m) => MonadOutputMethod (OutputMethodT m) where
-  present msg = OutputMethodT (ask >>= \f -> liftIO (f msg))
+  present fp msg = OutputMethodT (ask >>= \f -> liftIO (f fp msg))
   withWorkingDirectory fp comp = OutputMethodT $ liftBaseOp_ (Dir.withCurrentDirectory fp) (unOutputMethodT comp)
 
 instance MonadTrans OutputMethodT where
@@ -114,8 +114,8 @@ withOutputMethod (OutputMethod dest fmt) =
     FilePathOutputDestination fp -> \kont -> IO.withFile fp IO.AppendMode $ \h ->
       brak h (runOutputMethodT (pres True h) kont)
 
-plainTextOutput :: Bool -> IO.Handle -> Message -> IO ()
-plainTextOutput isFile h = \msg ->
+plainTextOutput :: Bool -> IO.Handle -> FilePath -> Message -> IO ()
+plainTextOutput isFile h = \_fp msg ->
   case msg of
     Normal warns ->
       unless (null warns) $ do

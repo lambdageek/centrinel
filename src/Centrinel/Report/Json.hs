@@ -15,34 +15,34 @@ import qualified Centrinel.Report.Types as R
 
 -- | Keep in sync with <https://github.com/lambdageek/centrinel-report>
 jsonBlobVersion :: BS.ByteString
-jsonBlobVersion = "0"
+jsonBlobVersion = "1"
 
-data Message =
-  Normal !String
-  | Abnormal !String
-  | Verbose !Bool !String
+newtype Message = Message String
   deriving (Generic)
+
+data TranslationUnitMessage =
+  TranslationUnitMessage { translationUnit :: FilePath
+                         , isAbnormal :: Bool
+                         , messages :: [Message]
+                         }
+  deriving Generic
 
 instance Data.Aeson.ToJSON Message where
   toEncoding = Data.Aeson.genericToEncoding Data.Aeson.defaultOptions
 
-output :: Bool -> IO.Handle -> R.Message -> IO ()
-output _isFile h = \rmsg ->
+instance Data.Aeson.ToJSON TranslationUnitMessage where
+  toEncoding = Data.Aeson.genericToEncoding Data.Aeson.defaultOptions
+
+output :: Bool -> IO.Handle -> FilePath -> R.Message -> IO ()
+output _isFile h = \fp rmsg ->
   case rmsg of
     R.Normal warns ->
-      unless (null warns) $ do
-      let n = length warns
-      mapM_ (put . Normal . show) warns
-      put $ Verbose (n <= 20) $ "There were " <> show n <> " notices"
+      unless (null warns) $ put $ TranslationUnitMessage fp False $ map (Message . show) warns
     R.Abnormal centErr ->
-      case centErr of
-        R.CentCPPError exitCode -> put $ Abnormal $ "Preprocessor failed with " ++ show exitCode
-        R.CentParseError err -> put $ Abnormal $ show err
-        R.CentAbortedAnalysisError errs -> do
-          mapM_ (put . Normal . show) errs
-          let n = length errs
-          put $ Verbose (n <= 20) $ "There were " <> show n <> " notices"
-          put $ Abnormal $ "Analysis of translation unit was aborted after the preceeding errors"
+      put $ TranslationUnitMessage fp True $ case centErr of
+        R.CentCPPError exitCode -> [ Message $ "Preprocessor failed with " ++ show exitCode ]
+        R.CentParseError err -> [ Message $ show err ]
+        R.CentAbortedAnalysisError errs -> map (Message . show) errs
   where
     put msg = do
       BS.hPut h (Data.Aeson.encode msg)

@@ -3,6 +3,7 @@ module Centrinel.Main where
 
 import Control.Monad (when, liftM)
 import Control.Monad.Except (runExceptT)
+import Control.Monad.IO.Class (MonadIO(..))
 
 import Data.Either (isRight)
 import Data.Monoid (Monoid(..), First(..))
@@ -18,7 +19,8 @@ import System.Environment (lookupEnv)
 import qualified System.FilePath as FilePath
 
 import Centrinel (runCentrinel)
-import Centrinel.Report (OutputMethod, OutputFn, withOutputMethod, presentReport)
+import Centrinel.Report (OutputMethod, withOutputMethod, withWorkingDirectory,
+                         presentReport, MonadOutputMethod(..))
 import Centrinel.System.RunLikeCC (RunLikeCC(..)
                                   , CppArgs, cppArgsInputFile
                                   , runLikeCC, ParsedCC(..))
@@ -70,14 +72,13 @@ runOneCentrinelCmd :: CentrinelOptions -> [String] -> IO ()
 runOneCentrinelCmd options args = do
       env <- prepareEnvironment options
       let compilation = CDB.makeStandaloneRunLikeCC args
-      result <- withOutputMethod (outputCentrinelOpt options) $ \present ->
-        analyzeTranslationUnit env present compilation 
+      result <- withOutputMethod (outputCentrinelOpt options) $ analyzeTranslationUnit env compilation 
       if result then exitSuccess else exitFailure
 
 runProjectCentrinelCmd :: CentrinelOptions -> FilePath -> IO ()
 runProjectCentrinelCmd options fp = do
       env <- prepareEnvironment options
-      putStrLn $ "Project is: '" ++ fp  ++ "'"
+      verboseDebugLn $ "Project is: '" ++ fp  ++ "'"
       cdb <- do
         res <- CDB.parseCompilationDatabase <$> B.readFile fp
         case res of
@@ -85,39 +86,39 @@ runProjectCentrinelCmd options fp = do
             putStrLn $ "error parsing compilation database " ++ fp ++ ": " ++ err
             exitFailure
           Right ok -> return ok
-      withOutputMethod (outputCentrinelOpt options) $ \present -> 
+      withOutputMethod (outputCentrinelOpt options) $ do
         forM_ cdb $ \compilation -> do
-        _ <- analyzeTranslationUnit env present compilation
-        return ()
+          _ <- analyzeTranslationUnit env compilation
+          return ()
 
-analyzeTranslationUnit :: (GCC, [ExcludedDir], HGData.Datafiles)
-                       -> OutputFn
+analyzeTranslationUnit :: (MonadIO m, MonadOutputMethod m)
+                       => (GCC, [ExcludedDir], HGData.Datafiles)
                        -> RunLikeCC CDB.Invoke
-                       -> IO Bool
-analyzeTranslationUnit (gcc, excludeDirs, datafiles) present compilation = do
+                       -> m Bool
+analyzeTranslationUnit (gcc, excludeDirs, datafiles) compilation = do
   let RunLikeCC {file, workingDirectory, artifact} = compilation
-  Dir.withCurrentDirectory (T.unpack workingDirectory) $ do
-    putStrLn $ "Analyzing " ++ show file
+  withWorkingDirectory (T.unpack workingDirectory) $ do
+    verboseDebugLn $ "Analyzing " ++ show file
     case runLikeCC gcc (T.unpack <$> CDB.invokeArguments artifact) of
       NoInputFilesCC -> return True
       ErrorParsingCC err -> do
-        putStrLn $ "error parsing cc arguments: " ++ err
+        verboseDebugLn $ "error parsing cc arguments: " ++ err
         return False
       ParsedCC cppArgs ignoredArgs -> do
         when (not $ null ignoredArgs) $ do
-          putStrLn "Ignored args:"
-          mapM_ (putStrLn . ("\t"++)) ignoredArgs
-        ignoreArtifact <- excludeAnalysis excludeDirs cppArgs
+          verboseDebugLn "Ignored args:"
+          mapM_ (verboseDebugLn . ("\t"++)) ignoredArgs
+        ignoreArtifact <- liftIO $ excludeAnalysis excludeDirs cppArgs
         if ignoreArtifact
           then
           do
-            putStrLn "in excluded directory, skipping"
+            verboseDebugLn "in excluded directory, skipping"
             return True
           else
           do
-            putStrLn (showCppArgs cppArgs)
-            result <- runExceptT (runCentrinel datafiles gcc cppArgs)
-            _ <- presentReport present result
+            liftIO $ putStrLn (showCppArgs cppArgs)
+            result <- liftIO $ runExceptT (runCentrinel datafiles gcc cppArgs)
+            _ <- presentReport result
             return (isRight result)
 
 
@@ -153,3 +154,6 @@ excludeAnalysis excludeDirs cppArgs = do
       excludeDirComponents = map FilePath.splitDirectories excludeDirs
       inputExcludedByDir d = d `L.isPrefixOf` inputDirComponents
   return (any inputExcludedByDir excludeDirComponents)
+
+verboseDebugLn :: MonadIO m => String -> m ()
+verboseDebugLn = liftIO . putStrLn

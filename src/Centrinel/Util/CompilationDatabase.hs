@@ -2,6 +2,7 @@
 {-# language NamedFieldPuns, OverloadedStrings #-}
 module Centrinel.Util.CompilationDatabase (parseCompilationDatabase
                                           , RunLikeCC (..)
+                                          , makeStandaloneRunLikeCC
                                           , Invoke (..)) where
 
 import Data.Text (Text)
@@ -30,3 +31,7 @@ commandObjectRunLikeCC cmd =
 -- Note that the name of the compiler is /not/ part of 'invokeArguments'.
 newtype Invoke = Invoke { invokeArguments :: [Text] }
   deriving (Show)
+
+makeStandaloneRunLikeCC :: [String] -> RunLikeCC Invoke
+makeStandaloneRunLikeCC = RunLikeCC mempty "." . Invoke . fmap T.pack
+

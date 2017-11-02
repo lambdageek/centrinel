@@ -4,6 +4,7 @@ module Centrinel.Main where
 import Control.Monad (when, liftM)
 import Control.Monad.Except (runExceptT)
 
+import Data.Either (isRight)
 import Data.Monoid (Monoid(..), First(..))
 import Data.Foldable (forM_)
 import qualified Data.List as L
@@ -17,8 +18,10 @@ import System.Environment (lookupEnv)
 import qualified System.FilePath as FilePath
 
 import Centrinel (runCentrinel)
-import Centrinel.Report (OutputMethod, withOutputMethod, presentReport, report)
-import Centrinel.System.RunLikeCC (runLikeCC, CppArgs, cppArgsInputFile, RunLikeCC(..), ParsedCC(..))
+import Centrinel.Report (OutputMethod, OutputFn, withOutputMethod, presentReport)
+import Centrinel.System.RunLikeCC (RunLikeCC(..)
+                                  , CppArgs, cppArgsInputFile
+                                  , runLikeCC, ParsedCC(..))
 import qualified Centrinel.Util.Datafiles as HGData
 import qualified Centrinel.Util.CompilationDatabase as CDB
 
@@ -27,6 +30,7 @@ import Language.C.System.GCC (newGCC, GCC)
 import Centrinel.Debug.PrettyCppArgs (showCppArgs)
 
 type CppArgStrings = [String]
+type ExcludedDir = FilePath
 
 -- | Centrinel command to run
 data CentrinelCmd =
@@ -58,30 +62,21 @@ data CentrinelOptions = CentrinelOptions {
 main :: CentrinelCmd -> IO ()
 main cmd =
   case cmd of
-    RunOneCentrinelCmd options args -> do
-      (gcc, excludeDirs, datafiles) <- prepareEnvironment options
-      cppArgs <- case runLikeCC gcc args of
-        NoInputFilesCC -> exitSuccess -- nothing to do
-        ErrorParsingCC err -> do
-          putStrLn $ "error parsing cc arguments: " ++ err
-          exitFailure
-        ParsedCC cppArgs ignoredArgs -> do
-          let debugging = True
-          when (debugging && not (null ignoredArgs)) $ do
-            putStrLn "Ignored args:"
-            mapM_ (putStrLn . ("\t"++)) ignoredArgs
-          putStrLn (showCppArgs cppArgs)
-          ignore <- excludeAnalysis excludeDirs cppArgs
-          when ignore $ do
-            putStrLn "File excluded from analysis"
-            exitSuccess
-          return cppArgs
-      res <- report (outputCentrinelOpt options) (runCentrinel datafiles gcc cppArgs)
-      case res of
-        Nothing -> exitFailure
-        Just _ -> exitSuccess
-    RunProjectCentrinelCmd options fp -> do
-      (gcc, excludeDirs, datafiles) <- prepareEnvironment options
+    RunOneCentrinelCmd options args -> runOneCentrinelCmd options args
+    RunProjectCentrinelCmd options fp -> runProjectCentrinelCmd options fp
+
+
+runOneCentrinelCmd :: CentrinelOptions -> [String] -> IO ()
+runOneCentrinelCmd options args = do
+      env <- prepareEnvironment options
+      let compilation = CDB.makeStandaloneRunLikeCC args
+      result <- withOutputMethod (outputCentrinelOpt options) $ \present ->
+        analyzeTranslationUnit env present compilation 
+      if result then exitSuccess else exitFailure
+
+runProjectCentrinelCmd :: CentrinelOptions -> FilePath -> IO ()
+runProjectCentrinelCmd options fp = do
+      env <- prepareEnvironment options
       putStrLn $ "Project is: '" ++ fp  ++ "'"
       cdb <- do
         res <- CDB.parseCompilationDatabase <$> B.readFile fp
@@ -91,32 +86,42 @@ main cmd =
             exitFailure
           Right ok -> return ok
       withOutputMethod (outputCentrinelOpt options) $ \present -> 
-        forM_ cdb $ \(RunLikeCC {file, workingDirectory, artifact}) ->
-        Dir.withCurrentDirectory (T.unpack workingDirectory) $ do
-        putStrLn $ "Analyzing " ++ show file
-        case runLikeCC gcc (T.unpack <$> CDB.invokeArguments artifact) of
-          NoInputFilesCC -> return ()
-          ErrorParsingCC err -> 
-            putStrLn $ "error parsing cc arguments: " ++ err
-          ParsedCC cppArgs ignoredArgs -> do
-            when (not $ null ignoredArgs) $ do
-              putStrLn "Ignored args:"
-              mapM_ (putStrLn . ("\t"++)) ignoredArgs
-            ignoreArtifact <- excludeAnalysis excludeDirs cppArgs
-            if ignoreArtifact
-              then
-              do
-                putStrLn "in excluded directory, skipping"
-                return ()
-              else
-              do
-                putStrLn (showCppArgs cppArgs)
-                result <- runExceptT (runCentrinel datafiles gcc cppArgs)
-                _ <- presentReport present result
-                return ()
+        forM_ cdb $ \compilation -> do
+        _ <- analyzeTranslationUnit env present compilation
+        return ()
+
+analyzeTranslationUnit :: (GCC, [ExcludedDir], HGData.Datafiles)
+                       -> OutputFn
+                       -> RunLikeCC CDB.Invoke
+                       -> IO Bool
+analyzeTranslationUnit (gcc, excludeDirs, datafiles) present compilation = do
+  let RunLikeCC {file, workingDirectory, artifact} = compilation
+  Dir.withCurrentDirectory (T.unpack workingDirectory) $ do
+    putStrLn $ "Analyzing " ++ show file
+    case runLikeCC gcc (T.unpack <$> CDB.invokeArguments artifact) of
+      NoInputFilesCC -> return True
+      ErrorParsingCC err -> do
+        putStrLn $ "error parsing cc arguments: " ++ err
+        return False
+      ParsedCC cppArgs ignoredArgs -> do
+        when (not $ null ignoredArgs) $ do
+          putStrLn "Ignored args:"
+          mapM_ (putStrLn . ("\t"++)) ignoredArgs
+        ignoreArtifact <- excludeAnalysis excludeDirs cppArgs
+        if ignoreArtifact
+          then
+          do
+            putStrLn "in excluded directory, skipping"
+            return True
+          else
+          do
+            putStrLn (showCppArgs cppArgs)
+            result <- runExceptT (runCentrinel datafiles gcc cppArgs)
+            _ <- presentReport present result
+            return (isRight result)
 
 
-prepareEnvironment :: CentrinelOptions -> IO (GCC, [FilePath], HGData.Datafiles)
+prepareEnvironment :: CentrinelOptions -> IO (GCC, [ExcludedDir], HGData.Datafiles)
 prepareEnvironment options = do
   gcc <- liftM newGCC (getCC options)
   excludeDirs <- traverse Dir.canonicalizePath (excludeDirsCentrinelOpt options)

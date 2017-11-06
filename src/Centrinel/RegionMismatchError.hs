@@ -1,4 +1,12 @@
-module Centrinel.RegionMismatchError (RegionMismatchError) where
+module Centrinel.RegionMismatchError (
+  -- * Region mismatch error
+  RegionMismatchError
+  , regionMismatchVictims
+  -- * Region mismatch victims
+  , RegionVictim (..)
+    -- * Unification failure positions
+  , extractVictimLocations
+) where
 
 import Data.Monoid ((<>))
 
@@ -39,7 +47,7 @@ instance U.Fallible RegionTerm RegionVar RegionMismatchError where
 instance Err.Error RegionMismatchError where
   errorInfo e@(RegionMismatchError v1 v2 _vl) = Err.mkErrorInfo (getErrorLevel e) msg bestNode
     where
-      (bestNode, otherNodes) = getPrimaryNodeInfo e
+      (bestNode, otherNodes) = extractVictimLocations (v1,v2)
       msg = PP.render $ PP.vcat [ PP.text "Region mismatch:" <+> PP.pretty (victimRegion v1)
                                   <+> PP.text "and" <+> PP.pretty (victimRegion v2)
                                 , if null otherNodes then PP.empty else PP.text "Additional locations:"
@@ -50,5 +58,13 @@ instance Err.Error RegionMismatchError where
 getErrorLevel :: RegionMismatchError -> ErrorLevel
 getErrorLevel (RegionMismatchError _ _ lvl) = lvl
 
-getPrimaryNodeInfo :: RegionMismatchError -> (NodeInfo, [NodeInfo])
-getPrimaryNodeInfo (RegionMismatchError v1 v2 _) = bestNodeLocTerm (victimLoc v1 <> victimLoc v2)
+-- | Given two mismatched regions, extract the best location
+-- responsible for the mismatch and the list of the other locations
+-- attributed to either victim.  (The notion of "best" is somewhat
+-- imprecise and dependent on the order of contraints created during
+-- unification)
+extractVictimLocations :: (RegionVictim, RegionVictim) -> (NodeInfo, [NodeInfo])
+extractVictimLocations (v1, v2) = bestNodeLocTerm (victimLoc v1 <> victimLoc v2)
+
+regionMismatchVictims :: RegionMismatchError -> (RegionVictim, RegionVictim)
+regionMismatchVictims (RegionMismatchError v1 v2 _) = (v1, v2)

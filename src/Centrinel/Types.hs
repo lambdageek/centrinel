@@ -25,4 +25,3 @@ data CentrinelAnalysisError =
   | CARegionMismatchError !RegionMismatchError
   -- | Error due to naked pointer analysis
   | CANakedPointerError !NakedPointerError
-  deriving (Show)

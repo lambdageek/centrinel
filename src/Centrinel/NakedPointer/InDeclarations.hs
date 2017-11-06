@@ -109,7 +109,7 @@ nakedPtrCheckDecl dcl = do
       npes <- execWriterT $ flip runReaderT initialEnv $ nakedPointers (C.declType dcl)
       return $ case npes of
         [] -> Nothing
-        _ ->  Just $ mkNakedPointerError (C.nodeInfo dcl) npes
+        _ ->  Just $ mkNakedPointerError False (C.nodeInfo dcl) npes
 
 findSuppressAttributeInDeclAttrs :: C.DeclAttrs -> Maybe Bool
 findSuppressAttributeInDeclAttrs (C.DeclAttrs _fspecs _storage attrs) =

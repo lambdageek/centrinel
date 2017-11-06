@@ -1,5 +1,7 @@
 module Centrinel.NakedPointerError where
 
+import Data.Monoid ((<>))
+
 import qualified Language.C.Data.Node as C
 import qualified Language.C.Analysis.SemRep as C
 import qualified Language.C.Data.Error as Err
@@ -9,12 +11,20 @@ import Centrinel.PrettyPrint ((<+>))
 
 import Language.C.Analysis.Debug () -- instance PP.Pretty Type
 
--- a naked pointer to the managed heap in a function declaration. NodeInfo for the return value, or zero or more arguments.
-data NakedPointerError = NakedPointerError !C.NodeInfo ![NPEVictim] !Err.ErrorLevel
+-- | A naked pointer to the managed heap in a function declaration or definiton.
+data NakedPointerError =
+  NakedPointerError
+  { inDefinition :: !Bool -- ^ 'True' if error is in the body of a definition, 'False' if a declaration
+  , primaryNode :: !C.NodeInfo -- ^ The definition or declaration in question
+  , victims :: !NPEVictims -- ^ The specific positions within the defn or decl that have naked pointers.
+  , npeErrLvl :: !Err.ErrorLevel -- ^ An error level in order to implement 'Err.changeErrorLevel'
+  }
 
 instance Show NakedPointerError where
   show = Err.showError ""
   
+-- | A trace to a specific position (and its type) in a definition or
+-- declaration that has a naked pointer to the managed heap.
 data NPEVictim = NPEVictim !C.Type !NPEPosn
 
 type NPEVictims = [NPEVictim]
@@ -50,22 +60,24 @@ prettyOrdinal n = PP.integer (toInteger n) PP.<> suf
             _ -> PP.text "th"
     h = n `mod` 100
 
--- trace of an error position
-data NPEPosn = NPEArg !Int !C.VarName !C.NodeInfo !NPEPosn -- function argument j
-  | NPERet !NPEPosn -- function return value
-  | NPEDecl !C.VarName -- a declaration
-  | NPETypeDefRef !C.NodeInfo !NPEPosn -- a typedef occurrence
-  | NPETypeDefDef !C.NodeInfo !NPEPosn -- the typedef declaration
-  | NPEDefn !C.VarName -- a (function) definition
-  | NPEStmt !C.NodeInfo !NPEPosn -- a statement in a function
-  | NPETypeOfExpr !C.NodeInfo  !NPEPosn -- in the type of the expression
+-- | Trace of an error position
+data NPEPosn = NPEArg !Int !C.VarName !C.NodeInfo !NPEPosn -- ^ function argument j
+  | NPERet !NPEPosn -- ^ function return value
+  | NPEDecl !C.VarName -- ^ a declaration
+  | NPETypeDefRef !C.NodeInfo !NPEPosn -- ^ a typedef occurrence
+  | NPETypeDefDef !C.NodeInfo !NPEPosn -- ^ the typedef declaration
+  | NPEDefn !C.VarName -- ^ a (function) definition
+  | NPEStmt !C.NodeInfo !NPEPosn -- ^ a statement in a function
+  | NPETypeOfExpr !C.NodeInfo  !NPEPosn -- ^ in the type of the expression
 
-mkNakedPointerError :: C.NodeInfo -> [NPEVictim] -> NakedPointerError
-mkNakedPointerError ni npes = NakedPointerError ni npes Err.LevelWarn
+mkNakedPointerError :: Bool -> C.NodeInfo -> [NPEVictim] -> NakedPointerError
+mkNakedPointerError inDefn ni npes = NakedPointerError inDefn ni npes Err.LevelWarn
 
 instance Err.Error NakedPointerError where
-  errorInfo (NakedPointerError ni victims lvl) = Err.mkErrorInfo lvl msg ni
+  errorInfo (NakedPointerError inDefn ni victims lvl) = Err.mkErrorInfo lvl msg ni
     where
       msg = PP.render $ PP.vcat (msghead : map PP.pretty victims)
-      msghead = PP.text "Naked pointer(s) to managed object(s) found in declaration"
-  changeErrorLevel (NakedPointerError ni victims _lvl) lvl = NakedPointerError ni victims lvl
+      msghead = PP.text ("Naked pointer(s) to managed object(s) found in "
+                         <> if inDefn then "definition" else "declaration")
+  changeErrorLevel npe lvl =
+    npe { npeErrLvl = lvl }

@@ -235,5 +235,5 @@ nakedPtrCheckDefn defn = do
   npes <- execWriterT $ flip runReaderT initialEnv $ evalLocalSymtabT symtab $ funNakedPointers defn
   return $ case npes of
     [] -> Nothing
-    _ ->  Just $ mkNakedPointerError (C.nodeInfo defn) npes
+    _ ->  Just $ mkNakedPointerError True (C.nodeInfo defn) npes
 

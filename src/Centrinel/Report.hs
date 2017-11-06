@@ -53,7 +53,7 @@ data OutputDestination =
 defaultOutputMethod :: OutputMethod
 defaultOutputMethod = OutputMethod StdOutOutputDestination PlainTextOutputFormat
 
-report :: OutputMethod -> FilePath -> ExceptT CentrinelError IO (a, [CentrinelAnalysisError]) -> IO (Maybe a)
+report :: OutputMethod -> FilePath -> ExceptT CentrinelFatalError IO (a, [CentrinelAnalysisError]) -> IO (Maybe a)
 report output fp comp = do
   x <- runExceptT comp
   withOutputMethod output $ presentReport fp x
@@ -72,7 +72,7 @@ class Monad m => MonadOutputMethod m where
 
 -- | Given either a successful @(x, warns)@ or failing @errors@, @presentReport
 -- result@ will 'present' the errors or warnings and return @Just x@ or @Nothing@.
-presentReport :: MonadOutputMethod m => FilePath -> Either CentrinelError (a, [CentrinelAnalysisError]) -> m (Maybe a)
+presentReport :: MonadOutputMethod m => FilePath -> Either CentrinelFatalError (a, [CentrinelAnalysisError]) -> m (Maybe a)
 presentReport fp x =
   case x of
     Left centErr -> do

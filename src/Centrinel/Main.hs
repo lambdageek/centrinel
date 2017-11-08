@@ -79,17 +79,29 @@ runProjectCentrinelCmd :: CentrinelOptions -> FilePath -> IO ()
 runProjectCentrinelCmd options fp = do
       env <- prepareEnvironment options
       verboseDebugLn $ "Project is: '" ++ fp  ++ "'"
-      cdb <- do
+      cdb_ <- do
         res <- CDB.parseCompilationDatabase <$> B.readFile fp
         case res of
           Left err -> do
             putStrLn $ "error parsing compilation database " ++ fp ++ ": " ++ err
             exitFailure
           Right ok -> return ok
+      let
+        -- Reorganize the cdb by workingDirectory/file mapped to a list of invocations
+        -- to make sure we only look at each translation unit once even if the compilation
+        -- database had multiple invocations on that file.
+        cdb = CDB.combineDuplicateRuns cdb_
       withOutputMethod (outputCentrinelOpt options) $ do
-        forM_ cdb $ \compilation -> do
-          _ <- analyzeTranslationUnit env compilation
-          return ()
+        forM_ cdb $ \compilations -> do
+          case CDB.divideRunLikeCC compilations of
+            [] ->
+              return () -- can't really happen, but it's benign
+            cs@(compilation:_) -> do
+              let tu = T.unpack (CDB.workingDirectory compilation) FilePath.</> T.unpack (CDB.file compilation)
+              when (length cs > 1) $
+                verboseDebugLn $ tu ++ ": picking first of " ++ show (length cs) ++ " compiler invocations for analysis"
+              _ <- analyzeTranslationUnit env compilation
+              return ()
 
 analyzeTranslationUnit :: (MonadIO m, MonadOutputMethod m)
                        => (GCC, [ExcludedDir], HGData.Datafiles)

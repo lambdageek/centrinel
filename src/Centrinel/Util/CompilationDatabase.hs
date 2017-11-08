@@ -3,9 +3,14 @@
 module Centrinel.Util.CompilationDatabase (parseCompilationDatabase
                                           , RunLikeCC (..)
                                           , makeStandaloneRunLikeCC
-                                          , Invoke (..)) where
+                                          , Invoke (..)
+                                          , combineDuplicateRuns
+                                          , divideRunLikeCC) where
 
+import Data.Function (on)
+import Data.Monoid (Monoid(..), (<>))
 import Data.Text (Text)
+import qualified Data.Map.Lazy as M
 import qualified Data.Text as T
 import qualified Data.ByteString.Lazy as B
 import Data.Aeson (eitherDecode')
@@ -35,3 +40,19 @@ newtype Invoke = Invoke { invokeArguments :: [Text] }
 makeStandaloneRunLikeCC :: [String] -> RunLikeCC Invoke
 makeStandaloneRunLikeCC = RunLikeCC mempty "." . Invoke . fmap T.pack
 
+mergeRunLikeCC :: Monoid a => RunLikeCC a -> RunLikeCC a -> RunLikeCC a
+mergeRunLikeCC i1 i2 = i1 { artifact = artifact i1 <> artifact i2 }
+
+
+combineDuplicateRuns :: [RunLikeCC Invoke] -> [RunLikeCC [Invoke]]
+combineDuplicateRuns = M.elems . M.fromListWith mergeRunLikeCC . map (\i -> (dirFilePair i, singletonize i))
+  where
+    dirFilePair :: RunLikeCC a -> (Text, Text)
+    dirFilePair i = (workingDirectory i, file i)
+
+    singletonize :: RunLikeCC a -> RunLikeCC [a]
+    singletonize i = i { artifact = [artifact i] }
+
+divideRunLikeCC :: RunLikeCC [a] -> [RunLikeCC a]
+divideRunLikeCC i = map (\a -> i { artifact = a }) (artifact i)
+{-# INLINEABLE divideRunLikeCC #-}

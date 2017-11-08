@@ -41,8 +41,8 @@ cppArgsForCentrinel cppArgs datafiles =
      , CPP.outputFile = Nothing
      }
 
-parseCFile :: CPP.Preprocessor cpp => cpp -> CPP.CppArgs -> ExceptT CentrinelError IO CTranslUnit
-{-# specialize parseCFile :: GCC -> CPP.CppArgs -> ExceptT CentrinelError IO CTranslUnit #-}
+parseCFile :: CPP.Preprocessor cpp => cpp -> CPP.CppArgs -> ExceptT CentrinelFatalError IO CTranslUnit
+{-# specialize parseCFile :: GCC -> CPP.CppArgs -> ExceptT CentrinelFatalError IO CTranslUnit #-}
 parseCFile cpp cppArgs = do
     inputStream <- withExceptT CentCPPError $ ExceptT $ CPP.runPreprocessor cpp cppArgs
     withExceptT CentParseError $ ExceptT $ return $ parseC inputStream (initPos $ CPP.inputFile cppArgs)
@@ -64,10 +64,10 @@ nonFatal comp = A.catchTravError comp (\e -> A.recordError $ changeErrorLevel e 
 
 -- | Given a parsed translation unit and some options, infer the regions for
 -- all the pointers and then scan the declarations and definitions to find any
--- uses of raw pointers into the managed region.  Throws a 'CentrinelError' if
+-- uses of raw pointers into the managed region.  Throws a 'CentrinelFatalError' if
 -- there was a fatal error, otherwise returns inference results and a list of
 -- non-fatal analysis errors.
-think :: Monad m => NP.AnalysisOpts -> CTranslUnit -> ExceptT CentrinelError m ((A.GlobalDecls, RegionInferenceResult), [CentrinelAnalysisError])
+think :: Monad m => NP.AnalysisOpts -> CTranslUnit -> ExceptT CentrinelFatalError m ((A.GlobalDecls, RegionInferenceResult), [CentrinelAnalysisError])
 think npOpts u = withExceptT CentAbortedAnalysisError $ HG.evalHGTrav $ do
   grir@(g,rir) <- inferRegions u
   NP.runInferenceResultT (nonFatal $ NP.analyze npOpts $ A.gObjs g) (A.gTypeDefs g) rir
@@ -75,13 +75,13 @@ think npOpts u = withExceptT CentAbortedAnalysisError $ HG.evalHGTrav $ do
 
 -- | Same as 'think' but returns @Left err@ for a fatal error or @Right (res,
 -- warns)@ for a result and non-fatal warnings.
-think' :: NP.AnalysisOpts -> CTranslUnit -> Either CentrinelError ((A.GlobalDecls, RegionInferenceResult), [CentrinelAnalysisError])
+think' :: NP.AnalysisOpts -> CTranslUnit -> Either CentrinelFatalError ((A.GlobalDecls, RegionInferenceResult), [CentrinelAnalysisError])
 think' npOpts = runIdentity . runExceptT . think npOpts
 
 -- | Run the preprocessor with the given arguments, parse the result and run
 -- the Centrinel analysis.
-runCentrinel :: CPP.Preprocessor cpp => HGData.Datafiles -> cpp -> CPP.CppArgs -> ExceptT CentrinelError IO ((), [CentrinelAnalysisError])
-{-# specialize runCentrinel :: HGData.Datafiles -> GCC -> CPP.CppArgs -> ExceptT CentrinelError IO ((), [CentrinelAnalysisError]) #-}
+runCentrinel :: CPP.Preprocessor cpp => HGData.Datafiles -> cpp -> CPP.CppArgs -> ExceptT CentrinelFatalError IO ((), [CentrinelAnalysisError])
+{-# specialize runCentrinel :: HGData.Datafiles -> GCC -> CPP.CppArgs -> ExceptT CentrinelFatalError IO ((), [CentrinelAnalysisError]) #-}
 runCentrinel datafiles cpp cppArgs_ = do
   let cppArgs = cppArgsForCentrinel cppArgs_ datafiles
   ast <- parseCFile cpp cppArgs

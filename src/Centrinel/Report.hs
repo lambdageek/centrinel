@@ -53,7 +53,7 @@ data OutputDestination =
 defaultOutputMethod :: OutputMethod
 defaultOutputMethod = OutputMethod StdOutOutputDestination PlainTextOutputFormat
 
-report :: OutputMethod -> FilePath -> ExceptT CentrinelError IO (a, [CentrinelAnalysisError]) -> IO (Maybe a)
+report :: OutputMethod -> FilePath -> ExceptT CentrinelFatalError IO (a, [CentrinelAnalysisError]) -> IO (Maybe a)
 report output fp comp = do
   x <- runExceptT comp
   withOutputMethod output $ presentReport fp x
@@ -72,7 +72,7 @@ class Monad m => MonadOutputMethod m where
 
 -- | Given either a successful @(x, warns)@ or failing @errors@, @presentReport
 -- result@ will 'present' the errors or warnings and return @Just x@ or @Nothing@.
-presentReport :: MonadOutputMethod m => FilePath -> Either CentrinelError (a, [CentrinelAnalysisError]) -> m (Maybe a)
+presentReport :: MonadOutputMethod m => FilePath -> Either CentrinelFatalError (a, [CentrinelAnalysisError]) -> m (Maybe a)
 presentReport fp x =
   case x of
     Left centErr -> do
@@ -82,7 +82,8 @@ presentReport fp x =
       present fp (Normal warns)
       return (Just a)
 
-type OutputFn = FilePath -> Message -> IO ()
+type CurrWorkDir = FilePath
+type OutputFn = (CurrWorkDir, CurrWorkDir -> FilePath -> Message -> IO ())
 
 -- | A monad transformer that adds a 'MonadOutputMethod' to a monad stack.
 newtype OutputMethodT m a = OutputMethodT { unOutputMethodT :: ReaderT OutputFn m a }
@@ -92,8 +93,15 @@ instance MonadIO m => MonadIO (OutputMethodT m) where
   liftIO m = OutputMethodT (liftIO m)
 
 instance (MonadBaseControl IO m, MonadIO m) => MonadOutputMethod (OutputMethodT m) where
-  present fp msg = OutputMethodT (ask >>= \f -> liftIO (f fp msg))
-  withWorkingDirectory fp comp = OutputMethodT $ liftBaseOp_ (Dir.withCurrentDirectory fp) (unOutputMethodT comp)
+  present fp msg = OutputMethodT (ask >>= \(currDir, f) -> liftIO (f currDir fp msg))
+  withWorkingDirectory newDir =
+    OutputMethodT
+    . liftBaseOp_ (Dir.withCurrentDirectory newDir)
+    . local (changeWorkDir newDir)
+    . unOutputMethodT
+    where
+      changeWorkDir :: CurrWorkDir -> OutputFn -> OutputFn
+      changeWorkDir d (_, fn) = (d, fn)
 
 instance MonadTrans OutputMethodT where
   lift = OutputMethodT . lift
@@ -110,16 +118,16 @@ withOutputMethod (OutputMethod dest fmt) =
         JSONOutputFormat -> (J.header, J.footer, J.output)
       brak h = bracket_ (header h) (footer h)
   in case dest of
-    StdOutOutputDestination -> \kont -> brak IO.stdout (runOutputMethodT (pres False IO.stdout) kont)
+    StdOutOutputDestination -> \kont -> brak IO.stdout (runOutputMethodT ("", pres False IO.stdout) kont)
     FilePathOutputDestination fp -> \kont -> IO.withFile fp IO.AppendMode $ \h ->
-      brak h (runOutputMethodT (pres True h) kont)
+      brak h (runOutputMethodT ("", pres True h) kont)
 
-plainTextOutput :: Bool -> IO.Handle -> FilePath -> Message -> IO ()
-plainTextOutput isFile h = \_fp msg ->
+plainTextOutput :: Bool -> IO.Handle -> CurrWorkDir -> FilePath -> Message -> IO ()
+plainTextOutput isFile h = \_cdw _fp msg ->
   case msg of
     Normal warns ->
       unless (null warns) $ do
-      mapM_ (IO.hPutStrLn h . show) warns
+      mapM_ (IO.hPutStrLn h . showCAE) warns
       when isFile (summarize "notices" $ length warns)
     Abnormal centErr -> 
       case centErr of
@@ -127,10 +135,12 @@ plainTextOutput isFile h = \_fp msg ->
           IO.hPutStrLn h $ "Preprocessor failed with " <> show exitCode
         CentParseError err -> IO.hPutStrLn h (show err)
         CentAbortedAnalysisError errs -> do
-          mapM_ (IO.hPutStrLn h . show) errs
+          mapM_ (IO.hPutStrLn h . showCAE) errs
           when isFile (summarize "notices" $ length errs)
           IO.hPutStrLn h $ "Analysis of translation unit was aborted after the preceeding errors"
   where
     summarize sortOfThings n =
       when (n >= 20) $ IO.hPutStrLn h $ "There were " <> show n <> " " <> sortOfThings
-
+    showCAE (CACError cerr) = show cerr
+    showCAE (CARegionMismatchError rme) = show rme
+    showCAE (CANakedPointerError npe) = show npe

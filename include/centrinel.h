@@ -105,6 +105,7 @@ int __builtin_ctzl (unsigned long l);
 int __builtin_ffsll (long long ll);
 int __builtin_isnan (double d);
 int __builtin_isfinite (double d);
+int __builtin_isunordered (double d1, double d2);
 /* https://gcc.gnu.org/onlinedocs/gcc/Other-Builtins.html says this function is
  * varargs although it only really takes a single argument
  * int __builtin_isinf_sign (...);

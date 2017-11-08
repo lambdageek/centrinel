@@ -5,7 +5,7 @@
 -- 2. and a unification state of region unification constraints and a map from C types to region unification variables.
 --
 --
-{-# language GeneralizedNewtypeDeriving #-}
+{-# language GeneralizedNewtypeDeriving, LambdaCase, ViewPatterns #-}
 module Centrinel.Trav (
   HGTrav
   , runHGTrav
@@ -22,9 +22,10 @@ import qualified Control.Monad.Trans.Reader as Reader
 import Control.Monad.Trans.State.Lazy (StateT)
 import qualified Control.Monad.Trans.State.Lazy as State
 
+import Data.Bifunctor (Bifunctor(..))
 import qualified Data.Map as Map
 
-import Language.C.Data.Error (CError)
+import Language.C.Data.Error (CError, fromError)
 
 import Language.C.Analysis.SemRep (DeclEvent)
 import qualified Language.C.Analysis.TravMonad as AM
@@ -33,6 +34,7 @@ import Language.C.Analysis.TravMonad.Instances ()
 import qualified Centrinel.Region.Ident as HGId
 import qualified Centrinel.Region.Unification as U
 import qualified Centrinel.Region.Unification.Term as U
+import Centrinel.Types (CentrinelAnalysisError (..))
 import Centrinel.Warning (hgWarn)
 
 type HGAnalysis s = DeclEvent -> HGTrav s ()
@@ -102,12 +104,12 @@ withHGAnalysis az =
 
 runHGTrav :: Monad m
           => HGTrav () a
-          -> ExceptT [CError] m ((a, RegionIdentMap), [CError])
+          -> ExceptT [CentrinelAnalysisError] m ((a, RegionIdentMap), [CentrinelAnalysisError])
 runHGTrav = helper State.runStateT
 
 evalHGTrav :: Monad m
            => HGTrav () a
-          -> ExceptT [CError] m (a, [CError])
+          -> ExceptT [CentrinelAnalysisError] m (a, [CentrinelAnalysisError])
 evalHGTrav = helper State.evalStateT
 
 helper :: Monad m
@@ -115,11 +117,26 @@ helper :: Monad m
            -> Map.Map k b
            -> U.UnifyRegT (AM.Trav ()) r)
        -> HGTrav t a
-       -> ExceptT [CError] m (r, [CError])
+       -> ExceptT [CentrinelAnalysisError] m (r, [CentrinelAnalysisError])
 helper destructState (HGTrav comp) =
-  ExceptT $ return $ AM.runTrav_ $ U.runUnifyRegT (destructState (Reader.runReaderT comp az) Map.empty)
+  ExceptT $ return . fixupErrors $ AM.runTrav_ $ U.runUnifyRegT (destructState (Reader.runReaderT comp az) Map.empty)
   where
     az = const (return ())
+    -- change errors and warnings from one form to another
+    fixupFatalNonFatal :: (e1 -> e2) -> (w1 -> w2)
+                       -> Either e1 (a, w1) -> Either e2 (a, w2)
+    fixupFatalNonFatal fErr fWarn = bimap fErr (fmap fWarn)
+    -- refine 'CError' errors and warnings to 'CentrinelAnalysisError'
+    fixupErrors :: Either [CError] (a, [CError])
+                -> Either [CentrinelAnalysisError] (a, [CentrinelAnalysisError])
+    fixupErrors = fixupFatalNonFatal (map centrinelAnalysisError) (map centrinelAnalysisError)
 
 
-
+-- | Refine an existentially-packed 'CError' into one of the well-known Centrinel
+-- analysis errors, or a purely C syntax or semantics error from the "language-c" package.
+centrinelAnalysisError :: CError -> CentrinelAnalysisError
+centrinelAnalysisError =
+  \case
+    e | Just regError <- fromError e -> CARegionMismatchError regError
+      | Just nakedPtrError <- fromError e -> CANakedPointerError nakedPtrError
+      | otherwise -> CACError e

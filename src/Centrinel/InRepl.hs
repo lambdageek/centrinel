@@ -29,7 +29,7 @@ pp = print . P.pretty
 think' :: NP.AnalysisOpts -> FilePath -> IO (Maybe (A.GlobalDecls, RegionInferenceResult))
 think' npOpts fp = report defaultOutputMethod fp (inp >>= think npOpts)
   where
-    inp :: ExceptT CentrinelError IO CTranslUnit
+    inp :: ExceptT CentrinelFatalError IO CTranslUnit
     inp = parseCFile (newGCC "cc") cpp_args
 
     cpp_args = (CPP.rawCppArgs preprocessorCmdLine fp) { CPP.cppTmpDir = Nothing }

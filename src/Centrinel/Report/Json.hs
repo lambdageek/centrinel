@@ -69,6 +69,9 @@ instance Data.Aeson.ToJSON CentrinelAnalysisMessage where
   toJSON e = Data.Aeson.object (encodeCentrinelAnalysisMessage e)
   toEncoding e = AE.pairs (mconcat $ encodeCentrinelAnalysisMessage e)
 
+tag :: Data.Aeson.KeyValue kv => String -> [kv]
+tag s = [ "tag" .= s ]
+
 encodeCentrinelAnalysisMessage :: Data.Aeson.KeyValue kv => CentrinelAnalysisMessage -> [kv]
 encodeCentrinelAnalysisMessage e = encodeErrorInfo (errorInfo e) <> encodeSpecificMessage e
     where
@@ -86,8 +89,8 @@ encodeErrorInfo (CError.ErrorInfo errorLevel position lines) =
 ea = Data.Aeson.Array mempty
 
 encodeSpecificMessage :: Data.Aeson.KeyValue kv => CentrinelAnalysisMessage -> [kv]
-encodeSpecificMessage (RegionMismatchMessage rme) = ["regionMismatchMessage" .= ea] -- [vic1, vic2]
-encodeSpecificMessage (NakedPointerMessage npe) = ["nakedPointerMessage" .= ea]
+encodeSpecificMessage (RegionMismatchMessage rme) = tag "regionMismatchMessage" <> ["regionMismatchMessage" .= ea] -- [vic1, vic2]
+encodeSpecificMessage (NakedPointerMessage npe) = tag "nakedPointerMessage" <> ["nakedPointerMessage" .= ea]
 encodeSpecificMessage (CErrorMessage npe) = []
 
 instance Data.Aeson.ToJSON ToolFail where
@@ -95,8 +98,8 @@ instance Data.Aeson.ToJSON ToolFail where
   toEncoding tf = AE.pairs (mconcat $ encodeToolFail tf)
 
 encodeToolFail :: Data.Aeson.KeyValue kv => ToolFail -> [kv]
-encodeToolFail (CPPToolFail ec) = ["cppToolFail" .= show ec]
-encodeToolFail (ParseToolFail pe) = ["parseToolFail" .= show pe]
+encodeToolFail (CPPToolFail ec) = tag "cppToolFail" <> [ "cppToolFail" .= show ec ]
+encodeToolFail (ParseToolFail pe) = tag "parseToolFail" <> [ "parseToolFail" .= show pe ]
 
 output :: Bool -> IO.Handle -> FilePath -> FilePath -> R.Message -> IO ()
 output _isFile h = \workDir fp rmsg ->

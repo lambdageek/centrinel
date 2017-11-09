@@ -17,7 +17,7 @@ import qualified System.IO as IO
 import Language.C.Parser (ParseError)
 import Language.C.Data.Error (CError)
 import qualified Language.C.Data.Error as CError
-import Centrinel.RegionMismatchError (RegionMismatchError(..))
+import Centrinel.RegionMismatchError (RegionMismatchError)
 import Centrinel.NakedPointerError (NakedPointerError)
 
 import qualified Centrinel.Report.Types as R
@@ -80,18 +80,19 @@ encodeCentrinelAnalysisMessage e = encodeErrorInfo (errorInfo e) <> encodeSpecif
       errorInfo (CErrorMessage m) = CError.errorInfo m
 
 encodeErrorInfo :: Data.Aeson.KeyValue kv => CError.ErrorInfo -> [kv]
-encodeErrorInfo (CError.ErrorInfo errorLevel position lines) =
+encodeErrorInfo (CError.ErrorInfo errorLevel position msgLines) =
   [ "errorLevel" .= (show errorLevel)
   , "position" .= (show position)
-  , "lines" .= lines
+  , "lines" .= msgLines
   ]
 
+ea :: Data.Aeson.Value
 ea = Data.Aeson.Array mempty
 
 encodeSpecificMessage :: Data.Aeson.KeyValue kv => CentrinelAnalysisMessage -> [kv]
-encodeSpecificMessage (RegionMismatchMessage rme) = tag "regionMismatchMessage" <> ["regionMismatchMessage" .= ea] -- [vic1, vic2]
-encodeSpecificMessage (NakedPointerMessage npe) = tag "nakedPointerMessage" <> ["nakedPointerMessage" .= ea]
-encodeSpecificMessage (CErrorMessage npe) = []
+encodeSpecificMessage (RegionMismatchMessage _rme) = tag "regionMismatchMessage" <> ["regionMismatchMessage" .= ea] -- [vic1, vic2]
+encodeSpecificMessage (NakedPointerMessage _npe) = tag "nakedPointerMessage" <> ["nakedPointerMessage" .= ea]
+encodeSpecificMessage (CErrorMessage _npe) = []
 
 instance Data.Aeson.ToJSON ToolFail where
   toJSON tf = Data.Aeson.object (encodeToolFail tf)
@@ -105,12 +106,22 @@ output :: Bool -> IO.Handle -> FilePath -> FilePath -> R.Message -> IO ()
 output _isFile h = \workDir fp rmsg ->
   case rmsg of
     R.Normal warns ->
-      unless (null warns) $ put $ TranslationUnitMessage workDir fp $ NormalMessages False $ map massageError warns
+      unless (null warns) $ put $ TranslationUnitMessage
+      { workingDirectory = workDir
+      , translationUnit = fp
+      , message = NormalMessages
+        { isAbnormal = False
+        , messages = map massageError warns
+        }
+      }
     R.Abnormal centErr ->
       put $ TranslationUnitMessage workDir fp $ case centErr of
-        R.CentCPPError exitCode -> ToolFailMessage $ CPPToolFail exitCode
-        R.CentParseError err -> ToolFailMessage $ ParseToolFail err
-        R.CentAbortedAnalysisError errs -> NormalMessages True $ map massageError errs
+        R.CentCPPError exitCode -> ToolFailMessage { toolFailure = CPPToolFail exitCode }
+        R.CentParseError err -> ToolFailMessage { toolFailure = ParseToolFail err }
+        R.CentAbortedAnalysisError errs -> NormalMessages
+          { isAbnormal = True
+          , messages = map massageError errs
+          }
   where
     put msg = do
       BS.hPut h (Data.Aeson.encode msg)

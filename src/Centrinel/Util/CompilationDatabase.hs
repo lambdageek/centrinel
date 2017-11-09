@@ -7,7 +7,6 @@ module Centrinel.Util.CompilationDatabase (parseCompilationDatabase
                                           , combineDuplicateRuns
                                           , divideRunLikeCC) where
 
-import Data.Function (on)
 import Data.Monoid (Monoid(..), (<>))
 import Data.Text (Text)
 import qualified Data.Map.Lazy as M

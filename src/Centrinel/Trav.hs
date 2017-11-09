@@ -13,6 +13,7 @@ module Centrinel.Trav (
   , HGAnalysis
   , withHGAnalysis
   , RegionIdentMap
+  , frozenRegionUnificationState
   ) where
 
 import Control.Monad.Trans.Class 
@@ -23,8 +24,9 @@ import Control.Monad.Trans.State.Lazy (StateT)
 import qualified Control.Monad.Trans.State.Lazy as State
 
 import Data.Bifunctor (Bifunctor(..))
-import qualified Data.Map as Map
+import qualified Data.Map.Lazy as Map
 
+import Language.C.Data.Ident (SUERef)
 import Language.C.Data.Error (CError, fromError)
 
 import Language.C.Analysis.SemRep (DeclEvent)
@@ -32,6 +34,7 @@ import qualified Language.C.Analysis.TravMonad as AM
 import Language.C.Analysis.TravMonad.Instances ()
 
 import qualified Centrinel.Region.Ident as HGId
+import Centrinel.Region.Region (RegionScheme)
 import qualified Centrinel.Region.Unification as U
 import qualified Centrinel.Region.Unification.Term as U
 import Centrinel.Types (CentrinelAnalysisError (..))
@@ -81,6 +84,23 @@ getRegionIdent i = HGTrav $ lift $ State.gets (Map.lookup i)
 
 putRegionIdent :: HGId.RegionIdent -> U.RegionUnifyTerm -> HGTrav s ()
 putRegionIdent i m = HGTrav $ lift $ State.modify' (Map.insert i m)
+
+-- | Gets a mapping of the region identifiers that have been noted by
+-- unification to their 'RegionScheme' as implied by the constraints available
+-- at the time of the call.
+frozenRegionUnificationState :: HGTrav s (Map.Map SUERef RegionScheme)
+frozenRegionUnificationState = do
+  sueRegions <- HGTrav $ lift $ State.gets munge
+  traverse (fmap U.extractRegionScheme . U.applyUnificationState) sueRegions
+  where
+    munge :: Map.Map HGId.RegionIdent U.RegionUnifyTerm -> Map.Map SUERef U.RegionUnifyTerm
+    munge = Map.mapKeysMonotonic onlySUERef . Map.filterWithKey (\k -> const (isStructTag k))
+    onlySUERef :: HGId.RegionIdent -> SUERef
+    onlySUERef (HGId.StructTagId sue) = sue
+    onlySUERef (HGId.TypedefId {}) = error "unexpected TypedefId in onlySUERef"
+    isStructTag :: HGId.RegionIdent -> Bool
+    isStructTag (HGId.StructTagId {}) = True
+    isStructTag (HGId.TypedefId {}) = False
 
 instance HGId.RegionAssignment HGId.RegionIdent U.RegionVar (HGTrav s) where
   assignRegion i = do

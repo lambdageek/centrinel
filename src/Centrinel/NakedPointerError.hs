@@ -74,9 +74,9 @@ mkNakedPointerError :: Bool -> C.NodeInfo -> [NPEVictim] -> NakedPointerError
 mkNakedPointerError inDefn ni npes = NakedPointerError inDefn ni npes Err.LevelWarn
 
 instance Err.Error NakedPointerError where
-  errorInfo (NakedPointerError inDefn ni victims lvl) = Err.mkErrorInfo lvl msg ni
+  errorInfo (NakedPointerError inDefn ni vs lvl) = Err.mkErrorInfo lvl msg ni
     where
-      msg = PP.render $ PP.vcat (msghead : map PP.pretty victims)
+      msg = PP.render $ PP.vcat (msghead : map PP.pretty vs)
       msghead = PP.text ("Naked pointer(s) to managed object(s) found in "
                          <> if inDefn then "definition" else "declaration")
   changeErrorLevel npe lvl =

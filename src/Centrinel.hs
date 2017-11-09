@@ -47,15 +47,18 @@ parseCFile cpp cppArgs = do
     inputStream <- withExceptT CentCPPError $ ExceptT $ CPP.runPreprocessor cpp cppArgs
     withExceptT CentParseError $ ExceptT $ return $ parseC inputStream (initPos $ CPP.inputFile cppArgs)
 
-getInferredRegions :: A.GlobalDecls -> HG.HGTrav s RegionInferenceResult
-getInferredRegions g = do
-  let structDefs = HG.justStructTagDefs (A.gTags g)
-  makeRegionInferenceResult <$> traverse HG.applyBindingTagDef structDefs
+getInferredStructTagRegions :: HG.HGTrav s RegionInferenceResult
+getInferredStructTagRegions = makeRegionInferenceResult <$> HG.frozenRegionUnificationState
 
+-- | Run the "language-c" semantic analysis pass on the given C translation unit and simultaneously
+-- apply the region unification algorithm to all structs with a region attribute.
+--
+-- Return the global declarations from the semantic analysis and a mapping from
+-- struct tags to their inferred region schemes.
 inferRegions :: CTranslUnit -> HG.HGTrav s (A.GlobalDecls, RegionInferenceResult)
 inferRegions u = do
   g <- HG.withHGAnalysis (nonFatal . HG.inferDeclEvent) $ A.analyseAST u
-  regions <- getInferredRegions g
+  regions <- getInferredStructTagRegions
   return (g, regions)
 
 -- | Catch any errors due to the given computation, record them as warnings and continue.

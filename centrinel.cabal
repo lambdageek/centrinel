@@ -2,7 +2,7 @@
 --  see http://haskell.org/cabal/users-guide/
 
 name:                centrinel
-version:             0.1.0.0
+version:             0.1.0.1
 synopsis:            Analyze how C programs use certain structs
 description:         Static analysis that considers the C heap as a collection of regions and disallows
                      access to certain regions except through a well-defined API.

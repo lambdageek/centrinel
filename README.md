@@ -24,12 +24,46 @@ Mono is transitioning to a regime where pointers to managed memory `MonoObject
 
 This package provides a library that analyzes C files to find places where raw pointers to managed memory are used.
 
+## Quick start example ##
+
+Here is how one might use Centrinel and
+[centrinel-report](https://github.com/lambdageek/centrinel-report) check an
+autotools project using [Bear](https://github.com/rizsotto/Bear) to intercept
+the C compiler invocations:
+
+```
+# assuming you have GHC and cabal installed
+$ pushd $CENTRINEL_DIR # go to the centrinel source directory
+$ echo "Building Centrinel"
+$ cabal sandbox init
+$ cabal install happy
+$ cabal install alex
+$ cabal install --dependencies-only
+$ cabal configure
+$ cabal build
+$ popd
+$ echo Building project using "bear"
+$ pushd $SRC_DIR
+$ ./autoconf ...
+$ bear make
+# produces a compile_commands.json file
+$ popd
+$ cd $CENTRINEL_DIR
+$ curl -o centrinel-report.tar.gz https://github.com/lambdageek/centrinel-report/releases/download/v0.3.1/centrinel-report.tar.gz
+$ tar xvzf centrinel-report.tar.gz
+# writes a skeleton HTML report to centrinel-report/
+$ cabal run centrinel -- --project $SRC_DIR/compile_commands.json --exclude $SRC_DIR/thirdparty --format json --output centrinel-report/centrinel-report.json
+# produces centrinel-report/centrinel-report.json
+$ cd centrinel-report && python -m SimpleHTTPServer 8000
+# go look at http://localhost:8000/
+```
+
+
 ## Installation ##
 
 This is an early development prototype, so the setup is a bit involved.
 
-You will need a recent GHC (tested with GHC 8.0.x, but 7.10.x will probably
-work too, and possibly 7.8 with minor patching).
+You will need a recent GHC (tested with GHC 8.2.x, GHC 8.0.x, and 7.10.x) and cabal.
 
 Dependencies: This program uses the `language-c` library for C parsing - you
 will need the `alex` lexer and `happy` parser installed (either systemwide or
@@ -46,14 +80,20 @@ cabal install alex
 cabal install --dependencies-only
 cabal configure
 cabal build
-cabal install     # needed to get include/centrinel.h in the right place
+cabal run centrinel -- --help
 ```
 
 ### The `include/centrinel.h` header ###
 
-The last step of the installation instructions, above, copies the centrinel
-header [include/centrinel.h](include/centrinel.h) to the right place (in the
-sandbox) so that centrinel can find it.
+Centrinel relies on some `__attribute__((...))` attributes and some
+preprocessor defines to tell it what to analyze.  As a convenience, when
+Centrinel invokes the C preprocessor, it automatically includes the file
+[`include/centrinel.h`](include/centrinel.h) before the user code.  If running
+from a sandbox, as above, the `cabal run centrinel` command will ensure that
+Centrinel is able to find this file. If instead you use `cabal install`, the
+Centrinel header will be copied to the cabal data directory, and the
+`centrinel` binary that is built will refer to that location even if you
+subsequently move the binary.
 
 This header defines `__CENTRINEL__` to `1` to indicate that centrinel is
 running; `__CENTRINEL_MANAGED_ATTR` attribute and `__CENTRINEL_MANAGED_REGION`
@@ -186,13 +226,26 @@ both with `-- CFLAGS CFILE` mode and with `--project JSON_FILE`).
   `__region(1)` in `include/centrinel.h`) will elicit an error if they occur
   anywhere in a function prototype (either a declaration or a definition).
 
-## What's planned ##
-
 * Checking of function bodies for use of `__CENTRINEL_MANAGED_REGION` pointers.
 
 * A way of annotating blessed functions/structs that are allowed to manipulate
-  pointers to the managed heap without an error.
-
+  pointers to the managed heap without an error using `__CENTRINEL_SUPPRESS_ATTR(1)` which may be applied to:
+  * a label at the beginning of a compound statement:
+	```c
+		{
+			l: __CENTRINEL_SUPPRESS_ATTR(1) ;
+			/* your code that manipulated managed objecs */
+		}
+	```
+  * on a function declaration, to suppress warnings about the function arguments and results:
+    ```c
+	int __CENTRINEL_SUPPRESS_ATTR(1) foo (...); /* no warnings about pointers in ... */
+	```
+  * Additionally `__CENTRINEL_SUPPRESS_ATTR(0)` may be used to turn checking
+    back in within a suppressed context.  This is useful for, for example,
+    macro expansion: you want the body of the macro to be trusted, so the
+    pointer checking is suppressed, but the arguments are unsuppressed so that
+    they are checked.
 
 # Footnotes #
 

@@ -1,7 +1,9 @@
-resolver: nightly-2017-10-21
+resolver: lts-9.17
 packages:
 - '.'
 extra-deps:
 - language-c-0.7.0
+- clang-compilation-database-0.1.0.0
+- aeson-1.2.3.0
 flags: {}
 extra-package-dbs: []

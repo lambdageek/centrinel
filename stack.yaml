@@ -2,8 +2,7 @@ resolver: lts-10.4
 packages:
 - '.'
 extra-deps:
-- git: https://github.com/lambdageek/language-c.git
-  commit: 4a129566cca8813e682c7ddacc7dd351ecf5bcd8 # stacky branch
+- language-c-0.7.2
 - clang-compilation-database-0.1.0.0
 - aeson-1.2.3.0
 flags: {}

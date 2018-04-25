@@ -105,6 +105,8 @@ typedef unsigned __int128 __uint128_t;
 #if __GNUC__ >= 7
 typedef float _Float32;
 typedef double _Float64;
+typedef _Float32 _Float32x;
+typedef _Float64 _Float64x;
 #endif
 
 int __builtin_ctzl (unsigned long l);

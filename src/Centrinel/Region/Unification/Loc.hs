@@ -2,13 +2,14 @@
 module Centrinel.Region.Unification.Loc where
 
 import Data.Monoid (Monoid(..))
+import Data.Semigroup as Sem
 
 import qualified Data.Set as Set
 
 import qualified Language.C.Data.Node as C
 
 newtype LocTerm = LocTerm {locTermNodes :: Set.Set C.NodeInfo}
-  deriving (Monoid, Show)
+  deriving (Sem.Semigroup, Monoid, Show)
 
 -- Not really the best. For now the heuristic is whatever comes later in the file is probably most relevant.
 --

@@ -4,12 +4,13 @@
 module Data.Assoc where
 
 import qualified Data.Map as Map
+import Data.Semigroup as Sem
 
 import qualified Centrinel.PrettyPrint as PP
 import qualified Language.C.Analysis.Debug as DP  
 
 newtype Assoc k a = Assoc { getAssocMap :: Map.Map k a }
-  deriving (Show, Eq, Ord, Functor, Foldable, Monoid)
+  deriving (Show, Eq, Ord, Functor, Foldable, Monoid, Sem.Semigroup)
 
 instance Traversable (Assoc k) where
   traverse f = fmap Assoc . traverse f . getAssocMap

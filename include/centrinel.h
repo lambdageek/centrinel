@@ -101,6 +101,12 @@ typedef __int128 __int128_t;
 typedef __int128 int128_t;
 typedef unsigned __int128 __uint128_t;
 
+/* GCC 7.x adds _FloatN types that language-c doesn't know about yet */
+#if __GNUC__ >= 7
+typedef float _Float32;
+typedef double _Float64;
+#endif
+
 int __builtin_ctzl (unsigned long l);
 int __builtin_ffsll (long long ll);
 int __builtin_isnan (double d);

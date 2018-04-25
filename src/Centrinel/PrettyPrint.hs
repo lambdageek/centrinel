@@ -12,6 +12,8 @@ module Centrinel.PrettyPrint (
 
 import qualified Language.C.Data.Position as C
 
+import Prelude hiding ((<>))
+
 import Language.C.Pretty (Pretty (..), prettyUsingInclude)
 import Text.PrettyPrint
 

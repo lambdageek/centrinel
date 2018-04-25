@@ -1,9 +1,6 @@
-resolver: lts-10.4
+resolver: lts-11.6
 packages:
 - '.'
-extra-deps:
-- language-c-0.7.2
-- clang-compilation-database-0.1.0.0
-- aeson-1.2.3.0
+extra-deps: []
 flags: {}
 extra-package-dbs: []

@@ -17,11 +17,12 @@ import qualified Language.C.Data.Node as C
 
 import Centrinel.Control.Monad.Class.RegionResult
 
+import Centrinel.Data.CodePosition (NPEPosn(..))
+
 import Centrinel.NakedPointer.Env
 import Centrinel.NakedPointer.FindSuppressAttribute (findSuppressInSemAttrList)
 import Centrinel.NakedPointer.Utils
-import Centrinel.NakedPointerError (NPEPosn(..)
-                                   , NPEVictims
+import Centrinel.NakedPointerError (NPEVictims
                                    , NakedPointerError
                                    , mkNakedPointerError
                                    )

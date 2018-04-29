@@ -24,11 +24,13 @@ import Language.C.Analysis.TravMonad.Instances ()
 import Centrinel.Control.Monad.Class.RegionResult
 import Centrinel.Control.Monad.LocalSymtab (evalLocalSymtabT)
 
+import Centrinel.Data.CodePosition (NPEPosn (..))
+
 import Centrinel.NakedPointer.Env
 import Centrinel.NakedPointer.FindSuppressAttribute (findSuppressInCAttrList)
 import Centrinel.NakedPointer.InDeclarations
 import Centrinel.NakedPointer.Utils
-import Centrinel.NakedPointerError (NPEPosn(..), NPEVictims, NakedPointerError, mkNakedPointerError)
+import Centrinel.NakedPointerError (NPEVictims, NakedPointerError, mkNakedPointerError)
 
   
 -- | Given a structure @a@ whose meaning may depend on a local symbol table

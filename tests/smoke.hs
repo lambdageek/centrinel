@@ -35,7 +35,7 @@ assertRunsTestCase fp = testCase (fp ++ " runs") cmd
       case runLikeCC gcc [fp] of
         ParsedCC args [] -> do
           ec <- C.report C.defaultOutputMethod fp $ runCentrinel datafiles gcc args
-          assertEqual "exit code" (Just ()) (const () <$> ec) -- throw away analysis results
+          assertEqual "exit code" True ec
         NoInputFilesCC -> assertFailure $ "expected input files in smoketest " ++ fp
         ErrorParsingCC err -> assertFailure $ "unexpected parse error \"" ++ err ++ "\" in smoketest " ++ fp
         ParsedCC _args ignoredArgs -> assertFailure $ "unepxected ignored args " ++ show ignoredArgs ++ " in smoketest " ++ fp
@@ -44,13 +44,13 @@ assertRunsTestCase fp = testCase (fp ++ " runs") cmd
 
 -- | Run the preprocessor with the given arguments, parse the result and run
 -- the Centrinel analysis.
-runCentrinel :: CPP.Preprocessor cpp => CData.Datafiles -> cpp -> CPP.CppArgs -> ExceptT CentrinelFatalError IO ((), [CentrinelAnalysisError])
-{-# specialize runCentrinel :: CData.Datafiles -> GCC -> CPP.CppArgs -> ExceptT CentrinelFatalError IO ((), [CentrinelAnalysisError]) #-}
+runCentrinel :: CPP.Preprocessor cpp => CData.Datafiles -> cpp -> CPP.CppArgs -> ExceptT CentrinelFatalError IO CentrinelAnalysisErrors
+{-# specialize runCentrinel :: CData.Datafiles -> GCC -> CPP.CppArgs -> ExceptT CentrinelFatalError IO CentrinelAnalysisErrors #-}
 runCentrinel datafiles cpp cppArgs_ = do
   let cppArgs = cppArgsForCentrinel cppArgs_ datafiles
   ast <- parseCFile cpp cppArgs
   let opts = makeNakedPointerOpts (CPP.inputFile cppArgs)
-  fmap (\(_, warns) -> ((), warns)) (runPlan defaultPlan opts ast)
+  runPlan defaultPlan opts ast
 
 makeNakedPointerOpts :: FilePath -> NP.AnalysisOpts
 makeNakedPointerOpts fp = NP.AnalysisOpts {NP.analysisOptFilterPath = Just fp }

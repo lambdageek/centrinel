@@ -16,6 +16,7 @@ module Centrinel.Trav (
   , frozenRegionUnificationState
   ) where
 
+
 import Control.Monad.Trans.Class 
 import Control.Monad.Trans.Reader (ReaderT)
 import Control.Monad.Except (ExceptT (..))
@@ -24,6 +25,7 @@ import Control.Monad.Trans.State.Lazy (StateT)
 import qualified Control.Monad.Trans.State.Lazy as State
 
 import Data.Bifunctor (Bifunctor(..))
+import Data.Foldable (foldMap)
 import qualified Data.Map.Lazy as Map
 
 import Language.C.Data.Ident (SUERef)
@@ -37,7 +39,9 @@ import qualified Centrinel.Region.Ident as HGId
 import Centrinel.Region.Region (RegionScheme)
 import qualified Centrinel.Region.Unification as U
 import qualified Centrinel.Region.Unification.Term as U
-import Centrinel.Types (CentrinelAnalysisError (..))
+import Centrinel.Types (CentrinelAnalysisError (..)
+                       , CentrinelAnalysisErrors
+                       , singleAnalysisError)
 import Centrinel.Warning (hgWarn)
 
 type HGAnalysis s = DeclEvent -> HGTrav s ()
@@ -124,12 +128,12 @@ withHGAnalysis az =
 
 runHGTrav :: Monad m
           => HGTrav () a
-          -> ExceptT [CentrinelAnalysisError] m ((a, RegionIdentMap), [CentrinelAnalysisError])
+          -> ExceptT CentrinelAnalysisErrors m ((a, RegionIdentMap), CentrinelAnalysisErrors)
 runHGTrav = helper State.runStateT
 
 evalHGTrav :: Monad m
            => HGTrav () a
-          -> ExceptT [CentrinelAnalysisError] m (a, [CentrinelAnalysisError])
+          -> ExceptT CentrinelAnalysisErrors m (a, CentrinelAnalysisErrors)
 evalHGTrav = helper State.evalStateT
 
 helper :: Monad m
@@ -137,7 +141,7 @@ helper :: Monad m
            -> Map.Map k b
            -> U.UnifyRegT (AM.Trav ()) r)
        -> HGTrav t a
-       -> ExceptT [CentrinelAnalysisError] m (r, [CentrinelAnalysisError])
+       -> ExceptT CentrinelAnalysisErrors m (r, CentrinelAnalysisErrors)
 helper destructState (HGTrav comp) =
   ExceptT $ return . fixupErrors $ AM.runTrav_ $ U.runUnifyRegT (destructState (Reader.runReaderT comp az) Map.empty)
   where
@@ -148,15 +152,16 @@ helper destructState (HGTrav comp) =
     fixupFatalNonFatal fErr fWarn = bimap fErr (fmap fWarn)
     -- refine 'CError' errors and warnings to 'CentrinelAnalysisError'
     fixupErrors :: Either [CError] (a, [CError])
-                -> Either [CentrinelAnalysisError] (a, [CentrinelAnalysisError])
-    fixupErrors = fixupFatalNonFatal (map centrinelAnalysisError) (map centrinelAnalysisError)
+                -> Either CentrinelAnalysisErrors (a, CentrinelAnalysisErrors)
+    fixupErrors = fixupFatalNonFatal (foldMap centrinelAnalysisError) (foldMap centrinelAnalysisError)
 
 
 -- | Refine an existentially-packed 'CError' into one of the well-known Centrinel
 -- analysis errors, or a purely C syntax or semantics error from the "language-c" package.
-centrinelAnalysisError :: CError -> CentrinelAnalysisError
-centrinelAnalysisError =
-  \case
-    e | Just regError <- fromError e -> CARegionMismatchError regError
-      | Just nakedPtrError <- fromError e -> CANakedPointerError nakedPtrError
-      | otherwise -> CACError e
+centrinelAnalysisError :: CError -> CentrinelAnalysisErrors
+centrinelAnalysisError = singleAnalysisError . matchError
+  where
+    matchError = \case
+      e | Just regError <- fromError e -> CARegionMismatchError regError
+        | Just nakedPtrError <- fromError e -> CANakedPointerError nakedPtrError
+        | otherwise -> CACError e

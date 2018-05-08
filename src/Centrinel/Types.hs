@@ -1,7 +1,10 @@
 -- | Types relevant to the toplevel interface to Centrinel
+{-# Language GeneralizedNewtypeDeriving #-}
 module Centrinel.Types where
 
+import Data.Monoid (Monoid)
 import qualified System.Exit 
+import qualified Data.Semigroup as Semi
 
 import Language.C.Parser (ParseError)
 import Language.C.Data.Error (CError)
@@ -15,7 +18,7 @@ data CentrinelFatalError =
   CentCPPError !System.Exit.ExitCode -- ^ Error while invoking the C preprocessor
   | CentParseError !ParseError -- ^ Error while parsing the input C file
   -- | Error reports from Centrinel when analysis of a translation unit was aborted.
-  | CentAbortedAnalysisError ![CentrinelAnalysisError]
+  | CentAbortedAnalysisError !CentrinelAnalysisErrors
 
 -- | Errors that may arize in the course of centrinel analysis
 data CentrinelAnalysisError =
@@ -25,3 +28,9 @@ data CentrinelAnalysisError =
   | CARegionMismatchError !RegionMismatchError
   -- | Error due to naked pointer analysis
   | CANakedPointerError !NakedPointerError
+
+newtype CentrinelAnalysisErrors = CentrinelAnalysisErrors {getCentrinelAnalysisErrors :: [CentrinelAnalysisError]}
+  deriving (Semi.Semigroup, Monoid)
+
+singleAnalysisError :: CentrinelAnalysisError -> CentrinelAnalysisErrors
+singleAnalysisError e = CentrinelAnalysisErrors [e]

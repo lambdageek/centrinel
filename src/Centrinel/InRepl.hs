@@ -6,12 +6,10 @@ import Control.Monad.Except
 import Language.C.Syntax.AST (CTranslUnit)
 import qualified Language.C.System.Preprocess as CPP
 import Language.C.System.GCC (GCC, newGCC)
-import qualified Language.C.Analysis.SemRep as A
 
 import Centrinel.Types
 import Centrinel.AnalysisPlan (defaultPlan, runPlan)
 import Centrinel.Report
-import Centrinel.RegionInferenceResult (RegionInferenceResult)
 import qualified Centrinel.PrettyPrint as P
 import qualified Centrinel.NakedPointer as NP
 import Centrinel.System.ParseCFile (parseCFile)
@@ -29,7 +27,7 @@ pp = print . P.pretty
 -- >>> let fp = "c-examples/attrib.hs"
 -- >>> let opts = makeNakedPointerOpts fp
 -- >>> think' opts fp
-think' :: NP.AnalysisOpts -> FilePath -> IO (Maybe (A.GlobalDecls, RegionInferenceResult))
+think' :: NP.AnalysisOpts -> FilePath -> IO Bool
 think' npOpts fp = report defaultOutputMethod fp (inp >>= runPlan defaultPlan npOpts)
   where
     inp :: ExceptT CentrinelFatalError IO CTranslUnit
@@ -57,13 +55,13 @@ think' npOpts fp = report defaultOutputMethod fp (inp >>= runPlan defaultPlan np
 
 -- | Run the preprocessor with the given arguments, parse the result and run
 -- the Centrinel analysis.
-runCentrinel :: CPP.Preprocessor cpp => Datafiles.Datafiles -> cpp -> CPP.CppArgs -> ExceptT CentrinelFatalError IO ((), [CentrinelAnalysisError])
-{-# specialize runCentrinel :: Datafiles.Datafiles -> GCC -> CPP.CppArgs -> ExceptT CentrinelFatalError IO ((), [CentrinelAnalysisError]) #-}
+runCentrinel :: CPP.Preprocessor cpp => Datafiles.Datafiles -> cpp -> CPP.CppArgs -> ExceptT CentrinelFatalError IO CentrinelAnalysisErrors
+{-# specialize runCentrinel :: Datafiles.Datafiles -> GCC -> CPP.CppArgs -> ExceptT CentrinelFatalError IO CentrinelAnalysisErrors #-}
 runCentrinel datafiles cpp cppArgs_ = do
   let cppArgs = cppArgsForCentrinel cppArgs_ datafiles
   ast <- parseCFile cpp cppArgs
   let opts = makeNakedPointerOpts (CPP.inputFile cppArgs)
-  fmap (\(_, warns) -> ((), warns)) (runPlan defaultPlan opts ast)
+  runPlan defaultPlan opts ast
 
 makeNakedPointerOpts :: FilePath -> NP.AnalysisOpts
 makeNakedPointerOpts fp = NP.AnalysisOpts {NP.analysisOptFilterPath = Just fp }

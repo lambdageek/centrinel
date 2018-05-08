@@ -53,7 +53,7 @@ data OutputDestination =
 defaultOutputMethod :: OutputMethod
 defaultOutputMethod = OutputMethod StdOutOutputDestination PlainTextOutputFormat
 
-report :: OutputMethod -> FilePath -> ExceptT CentrinelFatalError IO (a, [CentrinelAnalysisError]) -> IO (Maybe a)
+report :: OutputMethod -> FilePath -> ExceptT CentrinelFatalError IO CentrinelAnalysisErrors -> IO Bool
 report output fp comp = do
   x <- runExceptT comp
   withOutputMethod output $ presentReport fp x
@@ -70,17 +70,17 @@ class Monad m => MonadOutputMethod m where
   withWorkingDirectory fp comp = liftBaseOp_ (Dir.withCurrentDirectory fp) comp
   {-# minimal present #-}
 
--- | Given either a successful @(x, warns)@ or failing @errors@, @presentReport
--- result@ will 'present' the errors or warnings and return @Just x@ or @Nothing@.
-presentReport :: MonadOutputMethod m => FilePath -> Either CentrinelFatalError (a, [CentrinelAnalysisError]) -> m (Maybe a)
+-- | Given either a successful @warns@ or failing @errors@, @presentReport
+-- result@ will 'present' the errors or warnings and return @True@ if successful.
+presentReport :: MonadOutputMethod m => FilePath -> Either CentrinelFatalError CentrinelAnalysisErrors -> m Bool
 presentReport fp x =
   case x of
     Left centErr -> do
       present fp (Abnormal centErr)
-      return Nothing
-    Right (a, warns) -> do
+      return False
+    Right warns -> do
       present fp (Normal warns)
-      return (Just a)
+      return True
 
 type CurrWorkDir = FilePath
 type OutputFn = (CurrWorkDir, CurrWorkDir -> FilePath -> Message -> IO ())
@@ -125,16 +125,18 @@ withOutputMethod (OutputMethod dest fmt) =
 plainTextOutput :: Bool -> IO.Handle -> CurrWorkDir -> FilePath -> Message -> IO ()
 plainTextOutput isFile h = \_cdw _fp msg ->
   case msg of
-    Normal warns ->
+    Normal warns_ -> do
+      let warns = getCentrinelAnalysisErrors warns_
       unless (null warns) $ do
-      mapM_ (IO.hPutStrLn h . showCAE) warns
-      when isFile (summarize "notices" $ length warns)
+        mapM_ (IO.hPutStrLn h . showCAE) warns
+        when isFile (summarize "notices" $ length warns)
     Abnormal centErr -> 
       case centErr of
         CentCPPError exitCode ->
           IO.hPutStrLn h $ "Preprocessor failed with " <> show exitCode
         CentParseError err -> IO.hPutStrLn h (show err)
-        CentAbortedAnalysisError errs -> do
+        CentAbortedAnalysisError errs_ -> do
+          let errs = getCentrinelAnalysisErrors errs_
           mapM_ (IO.hPutStrLn h . showCAE) errs
           when isFile (summarize "notices" $ length errs)
           IO.hPutStrLn h $ "Analysis of translation unit was aborted after the preceeding errors"

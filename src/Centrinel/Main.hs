@@ -20,13 +20,12 @@ import qualified System.FilePath as FilePath
 
 import Language.C.Syntax.AST (CTranslUnit)
 import Language.C.System.GCC (newGCC, GCC)
-import qualified Language.C.Analysis.SemRep as A
 
 import Centrinel.AnalysisPlan (Plan, defaultPlan, runPlan)
 import qualified Centrinel.NakedPointer as NP
 import Centrinel.Report (OutputMethod, withOutputMethod, withWorkingDirectory,
                          MonadOutputMethod(..))
-import Centrinel.Types (CentrinelFatalError, CentrinelAnalysisError)
+import Centrinel.Types (CentrinelFatalError, CentrinelAnalysisErrors)
 import Centrinel.Report.Types (Message(..))
 import Centrinel.System.RunLikeCC (RunLikeCC(..)
                                   , CppArgs, cppArgsInputFile
@@ -35,7 +34,6 @@ import Centrinel.System.RunLikeCC (RunLikeCC(..)
 import Centrinel.System.ParseCFile (parseCFile)
 import qualified Centrinel.Util.Datafiles as HGData
 import qualified Centrinel.Util.CompilationDatabase as CDB
-import Centrinel.RegionInferenceResult (RegionInferenceResult)
 
 import Centrinel.Debug.PrettyCppArgs (showCppArgs)
 
@@ -151,7 +149,7 @@ analyzeTranslationUnit plan (gcc, excludeDirs, datafiles) compilation = do
                     Left err -> do
                       present file (Abnormal err)
                       return False
-                    Right (_, warns) -> do
+                    Right warns -> do
                       present file (Normal warns)
                       return True
 
@@ -192,7 +190,7 @@ excludeAnalysis excludeDirs cppArgs = do
 -- | Same as 'think' but returns @Left err@ for a fatal error or @Right (res,
 -- warns)@ for a result and non-fatal warnings.
 think' :: Plan -> NP.AnalysisOpts -> CTranslUnit
-       -> Either CentrinelFatalError ((A.GlobalDecls, RegionInferenceResult), [CentrinelAnalysisError])
+       -> Either CentrinelFatalError CentrinelAnalysisErrors
 think' plan npOpts = runIdentity . runExceptT . runPlan plan npOpts
 
 verboseDebugLn :: MonadIO m => String -> m ()

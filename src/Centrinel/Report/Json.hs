@@ -150,22 +150,24 @@ encodeCodePosition p =
 output :: Bool -> IO.Handle -> FilePath -> FilePath -> R.Message -> IO ()
 output _isFile h = \workDir fp rmsg ->
   case rmsg of
-    R.Normal warns ->
-      unless (null warns) $ put $ TranslationUnitMessage
-      { workingDirectory = workDir
-      , translationUnit = fp
-      , message = NormalMessages
-        { isAbnormal = False
-        , messages = map massageError warns
+    R.Normal warns_ ->
+      let warns = R.getCentrinelAnalysisErrors warns_
+      in
+        unless (null warns) $ put $ TranslationUnitMessage
+        { workingDirectory = workDir
+        , translationUnit = fp
+        , message = NormalMessages
+          { isAbnormal = False
+          , messages = map massageError warns
+          }
         }
-      }
     R.Abnormal centErr ->
       put $ TranslationUnitMessage workDir fp $ case centErr of
         R.CentCPPError exitCode -> ToolFailMessage { toolFailure = CPPToolFail exitCode }
         R.CentParseError err -> ToolFailMessage { toolFailure = ParseToolFail err }
         R.CentAbortedAnalysisError errs -> NormalMessages
           { isAbnormal = True
-          , messages = map massageError errs
+          , messages = map massageError (R.getCentrinelAnalysisErrors errs)
           }
   where
     put msg = do

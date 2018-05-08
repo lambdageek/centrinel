@@ -28,8 +28,8 @@ defaultPlan :: Plan
 defaultPlan = Plan
 
 -- | Run the given plan
-runPlan :: Monad m => Plan -> NP.AnalysisOpts -> CTranslUnit -> ExceptT CentrinelFatalError m ((A.GlobalDecls, RegionInferenceResult), [CentrinelAnalysisError])
-runPlan Plan = think
+runPlan :: Monad m => Plan -> NP.AnalysisOpts -> CTranslUnit -> ExceptT CentrinelFatalError m CentrinelAnalysisErrors
+runPlan Plan opts = fmap snd . think opts
 
 getInferredStructTagRegions :: HG.HGTrav s RegionInferenceResult
 getInferredStructTagRegions = makeRegionInferenceResult <$> HG.frozenRegionUnificationState
@@ -54,7 +54,7 @@ nonFatal comp = A.catchTravError comp (\e -> A.recordError $ changeErrorLevel e 
 -- uses of raw pointers into the managed region.  Throws a 'CentrinelFatalError' if
 -- there was a fatal error, otherwise returns inference results and a list of
 -- non-fatal analysis errors.
-think :: Monad m => NP.AnalysisOpts -> CTranslUnit -> ExceptT CentrinelFatalError m ((A.GlobalDecls, RegionInferenceResult), [CentrinelAnalysisError])
+think :: Monad m => NP.AnalysisOpts -> CTranslUnit -> ExceptT CentrinelFatalError m ((A.GlobalDecls, RegionInferenceResult), CentrinelAnalysisErrors)
 think npOpts u = withExceptT CentAbortedAnalysisError $ HG.evalHGTrav $ do
   grir@(g,rir) <- inferRegions u
   NP.runInferenceResultT (nonFatal $ NP.analyze npOpts $ A.gObjs g) (A.gTypeDefs g) rir

@@ -25,8 +25,7 @@ cabal-version:       >=1.10
 tested-with:         GHC == 7.10.*, GHC == 8.0.*, GHC == 8.2.*, GHC == 8.4.*
 
 library
-  exposed-modules:     Centrinel,
-                       Centrinel.InRepl,
+  exposed-modules:     Centrinel.InRepl,
                        Centrinel.Types,
                        Centrinel.Report,
                        Centrinel.Report.Json,
@@ -48,6 +47,7 @@ library
                        Centrinel.Control.Monad.LocalSymtab,
                        Centrinel.Data.CodePosition,
                        Control.Unification.IntVar.Extras,
+                       Centrinel.AnalysisPlan,
                        Centrinel.NakedPointer,
                        Centrinel.NakedPointer.Env,
                        Centrinel.NakedPointer.FindSuppressAttribute,
@@ -59,6 +59,7 @@ library
                        Data.Assoc,
                        Centrinel.Main,
                        Centrinel.System.RunLikeCC,
+                       Centrinel.System.ParseCFile,
                        Centrinel.Util.Datafiles,
                        Language.C.Analysis.TravMonad.Instances,
                        Centrinel.Util.CompilationDatabase

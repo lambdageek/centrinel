@@ -13,7 +13,10 @@ module Centrinel.System.RunLikeCC (
   , Preprocessor
   , GCC
   , newGCC
-  , CppArgs) where
+  , CppArgs
+    -- * Argument filtering for Centrinel
+  , cppArgsForCentrinel
+  ) where
 
 import Data.Text (Text)
 import qualified Data.List
@@ -23,6 +26,7 @@ import Language.C.System.Preprocess (Preprocessor(..), CppArgs)
 import qualified Language.C.System.Preprocess as Cpp
 import Language.C.System.GCC (GCC, newGCC)
 
+import Centrinel.Util.Datafiles as Datafiles
 
 -- | The compiler command that the build process ran on the given file
 -- and the working directory at the time.
@@ -76,3 +80,15 @@ anySourceArgs = foldMap (Any . isSourceArg)
     -- borrow from sparse cgcc script's regex: do check if /^[^-].*\.c$/
     isSourceArg :: String -> Bool
     isSourceArg s = not ("-" `Data.List.isPrefixOf` s) && ".c" `Data.List.isSuffixOf` s
+
+-- | Remove any 'Cpp.outputFile' options, and add
+-- preprocessor defines and definitions for Centrinel to successfully parse and
+-- analize the specified input file.
+cppArgsForCentrinel :: Cpp.CppArgs -> Datafiles.Datafiles -> Cpp.CppArgs
+cppArgsForCentrinel cppArgs datafiles =
+  let centrinelHeader = Datafiles.datafileCentrinelHeader datafiles
+  in cppArgs
+     { Cpp.cppOptions = Cpp.cppOptions cppArgs ++ [ Cpp.IncludeFile centrinelHeader ]
+     , Cpp.outputFile = Nothing
+     }
+

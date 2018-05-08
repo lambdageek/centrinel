@@ -5,6 +5,7 @@ import Control.Monad (when, liftM)
 import Control.Monad.Except (runExceptT)
 import Control.Monad.IO.Class (MonadIO(..))
 
+import Data.Functor.Identity (Identity(..))
 import Data.Monoid (Monoid(..), First(..))
 import Data.Foldable (forM_)
 import qualified Data.List as L
@@ -17,17 +18,24 @@ import System.Exit (exitSuccess, exitFailure)
 import System.Environment (lookupEnv)
 import qualified System.FilePath as FilePath
 
-import Centrinel (parseCFile, cppArgsForCentrinel, makeNakedPointerOpts, think')
+import Language.C.Syntax.AST (CTranslUnit)
+import Language.C.System.GCC (newGCC, GCC)
+import qualified Language.C.Analysis.SemRep as A
+
+import Centrinel.AnalysisPlan (Plan, defaultPlan, runPlan)
+import qualified Centrinel.NakedPointer as NP
 import Centrinel.Report (OutputMethod, withOutputMethod, withWorkingDirectory,
                          MonadOutputMethod(..))
+import Centrinel.Types (CentrinelFatalError, CentrinelAnalysisError)
 import Centrinel.Report.Types (Message(..))
 import Centrinel.System.RunLikeCC (RunLikeCC(..)
                                   , CppArgs, cppArgsInputFile
-                                  , runLikeCC, ParsedCC(..))
+                                  , runLikeCC, ParsedCC(..)
+                                  , cppArgsForCentrinel)
+import Centrinel.System.ParseCFile (parseCFile)
 import qualified Centrinel.Util.Datafiles as HGData
 import qualified Centrinel.Util.CompilationDatabase as CDB
-
-import Language.C.System.GCC (newGCC, GCC)
+import Centrinel.RegionInferenceResult (RegionInferenceResult)
 
 import Centrinel.Debug.PrettyCppArgs (showCppArgs)
 
@@ -64,19 +72,20 @@ data CentrinelOptions = CentrinelOptions {
 main :: CentrinelCmd -> IO ()
 main cmd =
   case cmd of
-    RunOneCentrinelCmd options args -> runOneCentrinelCmd options args
-    RunProjectCentrinelCmd options fp -> runProjectCentrinelCmd options fp
+    RunOneCentrinelCmd options args -> runOneCentrinelCmd plan options args
+    RunProjectCentrinelCmd options fp -> runProjectCentrinelCmd plan options fp
+  where
+    plan = defaultPlan
 
-
-runOneCentrinelCmd :: CentrinelOptions -> [String] -> IO ()
-runOneCentrinelCmd options args = do
+runOneCentrinelCmd :: Plan -> CentrinelOptions -> [String] -> IO ()
+runOneCentrinelCmd plan options args = do
       env <- prepareEnvironment options
       let compilation = CDB.makeStandaloneRunLikeCC args
-      result <- withOutputMethod (outputCentrinelOpt options) $ analyzeTranslationUnit env compilation 
+      result <- withOutputMethod (outputCentrinelOpt options) $ analyzeTranslationUnit plan env compilation 
       if result then exitSuccess else exitFailure
 
-runProjectCentrinelCmd :: CentrinelOptions -> FilePath -> IO ()
-runProjectCentrinelCmd options fp = do
+runProjectCentrinelCmd :: Plan -> CentrinelOptions -> FilePath -> IO ()
+runProjectCentrinelCmd plan options fp = do
       env <- prepareEnvironment options
       verboseDebugLn $ "Project is: '" ++ fp  ++ "'"
       cdb_ <- do
@@ -100,14 +109,15 @@ runProjectCentrinelCmd options fp = do
               let tu = T.unpack (CDB.workingDirectory compilation) FilePath.</> T.unpack (CDB.file compilation)
               when (length cs > 1) $
                 verboseDebugLn $ tu ++ ": picking first of " ++ show (length cs) ++ " compiler invocations for analysis"
-              _ <- analyzeTranslationUnit env compilation
+              _ <- analyzeTranslationUnit plan env compilation
               return ()
 
 analyzeTranslationUnit :: (MonadIO m, MonadOutputMethod m)
-                       => (GCC, [ExcludedDir], HGData.Datafiles)
+                       => Plan
+                       -> (GCC, [ExcludedDir], HGData.Datafiles)
                        -> RunLikeCC CDB.Invoke
                        -> m Bool
-analyzeTranslationUnit (gcc, excludeDirs, datafiles) compilation = do
+analyzeTranslationUnit plan (gcc, excludeDirs, datafiles) compilation = do
   let RunLikeCC {file = file_, workingDirectory, artifact} = compilation
       file = T.unpack file_
   withWorkingDirectory (T.unpack workingDirectory) $ do
@@ -137,7 +147,7 @@ analyzeTranslationUnit (gcc, excludeDirs, datafiles) compilation = do
                 return False
               Right ast ->
                 let opts = makeNakedPointerOpts (cppArgsInputFile cppArgs)
-                in case think' opts ast of
+                in case think' plan opts ast of
                     Left err -> do
                       present file (Abnormal err)
                       return False
@@ -178,5 +188,16 @@ excludeAnalysis excludeDirs cppArgs = do
       inputExcludedByDir d = d `L.isPrefixOf` inputDirComponents
   return (any inputExcludedByDir excludeDirComponents)
 
+
+-- | Same as 'think' but returns @Left err@ for a fatal error or @Right (res,
+-- warns)@ for a result and non-fatal warnings.
+think' :: Plan -> NP.AnalysisOpts -> CTranslUnit
+       -> Either CentrinelFatalError ((A.GlobalDecls, RegionInferenceResult), [CentrinelAnalysisError])
+think' plan npOpts = runIdentity . runExceptT . runPlan plan npOpts
+
 verboseDebugLn :: MonadIO m => String -> m ()
 verboseDebugLn = liftIO . putStrLn
+
+makeNakedPointerOpts :: FilePath -> NP.AnalysisOpts
+makeNakedPointerOpts fp = NP.AnalysisOpts {NP.analysisOptFilterPath = Just fp }
+

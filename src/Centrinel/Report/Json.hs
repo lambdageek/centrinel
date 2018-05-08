@@ -1,5 +1,6 @@
 -- | JSON Output format for the analysis report
 {-# language DeriveGeneric, OverloadedStrings, LambdaCase #-}
+{-# options_ghc -fno-warn-orphans #-}
 module Centrinel.Report.Json (header, footer, output) where
 
 import GHC.Generics (Generic)
@@ -14,17 +15,21 @@ import Data.Monoid (Monoid(..), (<>))
 import System.Exit (ExitCode)
 import qualified System.IO as IO
 
+import qualified Language.C.Analysis.SemRep as C
 import Language.C.Parser (ParseError)
 import Language.C.Data.Error (CError)
 import qualified Language.C.Data.Error as CError
 import Centrinel.RegionMismatchError (RegionMismatchError)
-import Centrinel.NakedPointerError (NakedPointerError)
+import Centrinel.NakedPointerError (NakedPointerError(..), NPEVictim (..))
+import qualified Centrinel.PrettyPrint as PP
 
 import qualified Centrinel.Report.Types as R
 
+import Centrinel.Data.CodePosition
+
 -- | Keep in sync with <https://github.com/lambdageek/centrinel-report>
 jsonBlobVersion :: BS.ByteString
-jsonBlobVersion = "2"
+jsonBlobVersion = "3"
 
 data CentrinelAnalysisMessage =
   RegionMismatchMessage RegionMismatchError
@@ -73,34 +78,74 @@ tag :: Data.Aeson.KeyValue kv => String -> [kv]
 tag s = [ "tag" .= s ]
 
 encodeCentrinelAnalysisMessage :: Data.Aeson.KeyValue kv => CentrinelAnalysisMessage -> [kv]
-encodeCentrinelAnalysisMessage e = encodeErrorInfo (errorInfo e) <> encodeSpecificMessage e
+encodeCentrinelAnalysisMessage e = uncurry encodeErrorInfo (errorInfo e) <> encodeSpecificMessage e
     where
-      errorInfo (RegionMismatchMessage m) = CError.errorInfo m
-      errorInfo (NakedPointerMessage m) = CError.errorInfo m
-      errorInfo (CErrorMessage m) = CError.errorInfo m
+      errorInfo (RegionMismatchMessage m) =  (CError.errorInfo m, True)
+      errorInfo (NakedPointerMessage m) = (CError.errorInfo m, False)
+      errorInfo (CErrorMessage m) = (CError.errorInfo m, True)
 
-encodeErrorInfo :: Data.Aeson.KeyValue kv => CError.ErrorInfo -> [kv]
-encodeErrorInfo (CError.ErrorInfo errorLevel position msgLines) =
+encodeErrorInfo :: Data.Aeson.KeyValue kv => CError.ErrorInfo -> Bool -> [kv]
+encodeErrorInfo (CError.ErrorInfo errorLevel position msgLines) includeLines =
   [ "errorLevel" .= (show errorLevel)
   , "position" .= (show position)
-  , "lines" .= msgLines
   ]
+  <> if includeLines then ["lines" .= msgLines ] else mempty
 
 ea :: Data.Aeson.Value
 ea = Data.Aeson.Array mempty
 
 encodeSpecificMessage :: Data.Aeson.KeyValue kv => CentrinelAnalysisMessage -> [kv]
 encodeSpecificMessage (RegionMismatchMessage _rme) = tag "regionMismatchMessage" <> ["regionMismatchMessage" .= ea] -- [vic1, vic2]
-encodeSpecificMessage (NakedPointerMessage _npe) = tag "nakedPointerMessage" <> ["nakedPointerMessage" .= ea]
+encodeSpecificMessage (NakedPointerMessage npe) = tag "nakedPointerMessage" <> ["nakedPointerMessage" .= npe]
 encodeSpecificMessage (CErrorMessage _npe) = []
 
+instance Data.Aeson.ToJSON NakedPointerError where
+  toJSON = Data.Aeson.object . encodeNakedPointerError
+  toEncoding = AE.pairs . mconcat . encodeNakedPointerError
+
 instance Data.Aeson.ToJSON ToolFail where
-  toJSON tf = Data.Aeson.object (encodeToolFail tf)
-  toEncoding tf = AE.pairs (mconcat $ encodeToolFail tf)
+  toJSON = Data.Aeson.object . encodeToolFail
+  toEncoding = AE.pairs . mconcat . encodeToolFail
 
 encodeToolFail :: Data.Aeson.KeyValue kv => ToolFail -> [kv]
 encodeToolFail (CPPToolFail ec) = tag "cppToolFail" <> [ "cppToolFail" .= show ec ]
 encodeToolFail (ParseToolFail pe) = tag "parseToolFail" <> [ "parseToolFail" .= show pe ]
+
+encodeNakedPointerError :: Data.Aeson.KeyValue kv => NakedPointerError -> [kv]
+encodeNakedPointerError (NakedPointerError {inDefinition = inD, victims = vs}) =
+  [ "inDefintion" .= inD, "victims" .= vs]
+
+instance Data.Aeson.ToJSON NPEVictim where
+  toJSON = Data.Aeson.object . encodeNPEVictim
+  toEncoding = AE.pairs . mconcat . encodeNPEVictim
+
+encodeNPEVictim :: Data.Aeson.KeyValue kv => NPEVictim -> [kv]
+encodeNPEVictim (NPEVictim ty codePosn) =
+  [ "type" .= ty, "position" .= codePosn ]
+
+instance Data.Aeson.ToJSON C.Type where
+  toJSON = Data.Aeson.toJSON . PP.render . PP.pretty
+
+instance Data.Aeson.ToJSON NPEPosn where
+  toJSON = Data.Aeson.object . encodeCodePosition
+  toEncoding = AE.pairs . mconcat . encodeCodePosition
+
+encodeCodePosition :: Data.Aeson.KeyValue kv => NPEPosn -> [kv]
+encodeCodePosition p =
+  case p of
+    NPEArg j v ni p' -> tag "arg" <> ["index" .= j, "var" .= pretty v, "position" .= pos ni, "next" .= p']
+    NPERet p' -> tag "ret" <> ["next" .= p']
+    NPEDecl fname -> tag "decl" <> ["fname" .= pretty fname]
+    NPETypeDefRef ni p' -> tag "typedefRef" <> ["position" .= pos ni, "next" .= p']
+    NPETypeDefDef ni p' -> tag "typedef" <> ["position" .= pos ni, "next" .= p']
+    NPEDefn fname -> tag "defn" <> ["fname" .= pretty fname]
+    NPEStmt ni p' -> tag "stmt" <> ["position" .= pos ni, "next" .= p']
+    NPETypeOfExpr ni p' -> tag "typeOfExpr" <> ["position" .= pos ni, "next" .= p']
+  where
+    pos = PP.render . PP.prettyPos
+    pretty :: PP.Pretty a => a -> String
+    pretty = PP.render . PP.pretty 
+
 
 output :: Bool -> IO.Handle -> FilePath -> FilePath -> R.Message -> IO ()
 output _isFile h = \workDir fp rmsg ->

@@ -1,7 +1,7 @@
 -- | Defines the environment type for the naked pointer analysis
 module Centrinel.NakedPointer.Env where
 
-import Centrinel.NakedPointerError (NPEPosn)
+import Centrinel.Data.CodePosition (NPEPosn)
 
 -- | The environment for the naked pointer analysis
 data AnalysisEnv = AnalysisEnv

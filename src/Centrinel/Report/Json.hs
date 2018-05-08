@@ -97,7 +97,7 @@ ea = Data.Aeson.Array mempty
 encodeSpecificMessage :: Data.Aeson.KeyValue kv => CentrinelAnalysisMessage -> [kv]
 encodeSpecificMessage (RegionMismatchMessage _rme) = tag "regionMismatchMessage" <> ["regionMismatchMessage" .= ea] -- [vic1, vic2]
 encodeSpecificMessage (NakedPointerMessage npe) = tag "nakedPointerMessage" <> ["nakedPointerMessage" .= npe]
-encodeSpecificMessage (CErrorMessage _npe) = []
+encodeSpecificMessage (CErrorMessage _npe) = tag "cerrorMessage" 
 
 instance Data.Aeson.ToJSON NakedPointerError where
   toJSON = Data.Aeson.object . encodeNakedPointerError

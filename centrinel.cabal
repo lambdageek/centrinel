@@ -63,7 +63,9 @@ library
                        Centrinel.Util.Datafiles,
                        Language.C.Analysis.TravMonad.Instances,
                        Centrinel.Util.CompilationDatabase,
-                       Centrinel.FunTags.TagFunctions
+                       Centrinel.FunTags.TagFunctions,
+                       Centrinel.FunTags.Tag,
+                       Centrinel.FunTags.Unification.Term
   other-modules:       Centrinel.Debug.PrettyCppArgs,
                        ZeptoLens,
                        Paths_centrinel

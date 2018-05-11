@@ -1,5 +1,5 @@
 -- | Unification terms for tag collection
-module Centrinel.FunTags.Unification.Term (TagUVar, TagPreTerm, TagTerm, presentTags) where
+module Centrinel.FunTags.Unification.Term (TagUVar, TagPreTerm, TagTerm, presentTags, representTags) where
 
 import qualified Data.Map.Strict as M
 import qualified Data.Map.Merge.Strict as M
@@ -68,3 +68,12 @@ instance Unif.Unifiable TagPreTerm where
 -- @[T1 -> Present, ..., Tk -> Present]@
 presentTags :: S.Set BareTag -> TagTerm
 presentTags = Unif.UTerm . TagPreTerm . M.fromSet (const $ Unif.UTerm Present)
+
+-- | Given a (unified) 'TagTerm', get the set of tags (ie the keys of the
+-- 'TagPreTerm').  If the unification term is an uninstantiated variable (which
+-- means we haven't seen any concrete tags for this term), or 'Present' (which
+-- shouldn't happen), return the empty set.
+representTags :: TagTerm -> BareTagSet
+representTags (Unif.UVar {}) = mempty
+representTags (Unif.UTerm Present) = mempty
+representTags (Unif.UTerm (TagPreTerm tagMap)) = M.keysSet tagMap

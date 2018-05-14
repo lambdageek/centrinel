@@ -14,10 +14,10 @@ module Centrinel.Trav (
   , HGAnalysis
   , withHGAnalysis
   -- * Pointer region analysis
-  , PointerAnalysisT (..)
+  , PointerRegionAnalysisT (..)
   , RegionIdentMap
   , frozenRegionUnificationState
-  , hoistPointerAnalysis
+  , hoistPointerRegionAnalysis
   ) where
 
 
@@ -57,31 +57,31 @@ type RegionIdentMap = Map.Map HGId.RegionIdent U.RegionUnifyTerm
 type TravT s = ReaderT (HGAnalysis s)
 
 -- | Monad transformer that adds pointer region analysis on top of any underlying monad.
-newtype PointerAnalysisT m a = PointerAnalysisT { unPointerAnalysisT :: StateT RegionIdentMap (U.UnifyRegT m) a }
+newtype PointerRegionAnalysisT m a = PointerRegionAnalysisT { unPointerRegionAnalysisT :: StateT RegionIdentMap (U.UnifyRegT m) a }
                              deriving (Functor, Applicative, Monad)
 
-instance MonadTrans PointerAnalysisT where
-  lift m = PointerAnalysisT (lift $ lift m)
+instance MonadTrans PointerRegionAnalysisT where
+  lift m = PointerRegionAnalysisT (lift $ lift m)
 
 -- | The fixed monad stack for extensible semantic analyses of C programs.
 -- It's built on top of the base monad 'AM.Trav' that we build up with
 -- analysis-specific state, and then close up with 'TravT' which adds the
 -- 'handleDecl' event handling callbacks that are used to consume the C
 -- declarations.
-newtype HGTrav s a = HGTrav { unHGTrav :: TravT s (PointerAnalysisT (AM.Trav s)) a}
+newtype HGTrav s a = HGTrav { unHGTrav :: TravT s (PointerRegionAnalysisT (AM.Trav s)) a}
   deriving (Functor, Applicative, Monad)
 
-deriving instance AM.MonadName m => AM.MonadName (PointerAnalysisT m)
+deriving instance AM.MonadName m => AM.MonadName (PointerRegionAnalysisT m)
 
 deriving instance AM.MonadName (HGTrav s)
 
-deriving instance AM.MonadSymtab m => AM.MonadSymtab (PointerAnalysisT m)
+deriving instance AM.MonadSymtab m => AM.MonadSymtab (PointerRegionAnalysisT m)
 
 deriving instance AM.MonadSymtab (HGTrav s)
 
-instance AM.MonadCError m => AM.MonadCError (PointerAnalysisT m) where
+instance AM.MonadCError m => AM.MonadCError (PointerRegionAnalysisT m) where
   throwTravError = lift . AM.throwTravError
-  catchTravError (PointerAnalysisT c) handler = PointerAnalysisT (AM.catchTravError c (unPointerAnalysisT . handler))
+  catchTravError (PointerRegionAnalysisT c) handler = PointerRegionAnalysisT (AM.catchTravError c (unPointerRegionAnalysisT . handler))
   recordError = lift . AM.recordError
   getErrors = lift AM.getErrors
 
@@ -91,11 +91,11 @@ instance AM.MonadCError (HGTrav s) where
   recordError = HGTrav . AM.recordError
   getErrors = HGTrav $ AM.getErrors
 
-deriving instance AM.MonadCError m => U.RegionUnification (PointerAnalysisT m)
+deriving instance AM.MonadCError m => U.RegionUnification (PointerRegionAnalysisT m)
   
 deriving instance U.RegionUnification (HGTrav s)
 
-deriving instance AM.MonadCError m => U.ApplyUnificationState (PointerAnalysisT m)
+deriving instance AM.MonadCError m => U.ApplyUnificationState (PointerRegionAnalysisT m)
 
 deriving instance U.ApplyUnificationState (HGTrav s)
 
@@ -107,18 +107,18 @@ v -:= Just r = do
         AM.recordError (hgWarn "failed to unify regions" Nothing) -- TODO: region info
         return (U.regionUnifyVar v))
 
-getRegionIdent :: Monad m => HGId.RegionIdent -> PointerAnalysisT m (Maybe (U.RegionUnifyTerm))
-getRegionIdent i = PointerAnalysisT $ State.gets (Map.lookup i)
+getRegionIdent :: Monad m => HGId.RegionIdent -> PointerRegionAnalysisT m (Maybe (U.RegionUnifyTerm))
+getRegionIdent i = PointerRegionAnalysisT $ State.gets (Map.lookup i)
 
-putRegionIdent :: Monad m => HGId.RegionIdent -> U.RegionUnifyTerm -> PointerAnalysisT m ()
-putRegionIdent i m = PointerAnalysisT $ State.modify' (Map.insert i m)
+putRegionIdent :: Monad m => HGId.RegionIdent -> U.RegionUnifyTerm -> PointerRegionAnalysisT m ()
+putRegionIdent i m = PointerRegionAnalysisT $ State.modify' (Map.insert i m)
 
 -- | Gets a mapping of the region identifiers that have been noted by
 -- unification to their 'RegionScheme' as implied by the constraints available
 -- at the time of the call.
-frozenRegionUnificationState :: AM.MonadCError m => PointerAnalysisT m (Map.Map SUERef RegionScheme)
+frozenRegionUnificationState :: AM.MonadCError m => PointerRegionAnalysisT m (Map.Map SUERef RegionScheme)
 frozenRegionUnificationState = do
-  sueRegions <- PointerAnalysisT $ State.gets munge
+  sueRegions <- PointerRegionAnalysisT $ State.gets munge
   traverse (fmap U.extractRegionScheme . U.applyUnificationState) sueRegions
   where
     munge :: Map.Map HGId.RegionIdent U.RegionUnifyTerm -> Map.Map SUERef U.RegionUnifyTerm
@@ -130,7 +130,7 @@ frozenRegionUnificationState = do
     isStructTag (HGId.StructTagId {}) = True
     isStructTag (HGId.TypedefId {}) = False
 
-instance AM.MonadCError m => HGId.RegionAssignment (PointerAnalysisT m) where
+instance AM.MonadCError m => HGId.RegionAssignment (PointerRegionAnalysisT m) where
   assignRegion i = do
     v <- U.newRegion
     r <- getRegionIdent i
@@ -145,8 +145,8 @@ instance AM.MonadTrav (HGTrav s) where
     handler <- HGTrav Reader.ask
     handler ev
 
-hoistPointerAnalysis :: (forall m . AM.MonadCError m => PointerAnalysisT m a) -> HGTrav s a
-hoistPointerAnalysis comp = HGTrav $ lift comp
+hoistPointerRegionAnalysis :: (forall m . AM.MonadCError m => PointerRegionAnalysisT m a) -> HGTrav s a
+hoistPointerRegionAnalysis comp = HGTrav $ lift comp
 
 withHGAnalysis :: HGAnalysis s -> HGTrav s a -> HGTrav s a
 withHGAnalysis az =
@@ -172,7 +172,7 @@ helper :: Monad m
        -> HGTrav t a
        -> ExceptT CentrinelAnalysisErrors m (r, CentrinelAnalysisErrors)
 helper destructState (HGTrav comp) =
-  ExceptT $ return . fixupErrors $ AM.runTrav_ $ U.runUnifyRegT (destructState (unPointerAnalysisT (Reader.runReaderT comp az)) Map.empty)
+  ExceptT $ return . fixupErrors $ AM.runTrav_ $ U.runUnifyRegT (destructState (unPointerRegionAnalysisT (Reader.runReaderT comp az)) Map.empty)
   where
     az = const (return ())
     -- change errors and warnings from one form to another

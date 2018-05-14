@@ -1,7 +1,7 @@
 -- | Run an analysis plan on a translation unit
 module Centrinel.AnalysisPlan (Plan, defaultPlan, runPlan) where
 
-import Control.Monad.Except (ExceptT(..), withExceptT)
+import Control.Monad.Except (ExceptT (..))
 
 import Language.C.Syntax.AST (CTranslUnit)
 
@@ -13,6 +13,7 @@ import qualified Language.C.Analysis.TravMonad as A
 
 import qualified Centrinel.Trav as HG
 import qualified Centrinel.RegionInference as HG
+import Centrinel.PointerRegionAnalysis (getInferredStructTagRegions)
 import Centrinel.RegionInferenceResult
 import Centrinel.Types
 
@@ -29,10 +30,10 @@ defaultPlan = Plan
 
 -- | Run the given plan
 runPlan :: Monad m => Plan -> NP.AnalysisOpts -> CTranslUnit -> ExceptT CentrinelFatalError m CentrinelAnalysisErrors
-runPlan Plan opts = fmap snd . think opts
+runPlan Plan opts = think opts
 
-getInferredStructTagRegions :: A.MonadCError m => HG.PointerRegionAnalysisT m RegionInferenceResult
-getInferredStructTagRegions = makeRegionInferenceResult <$> HG.frozenRegionUnificationState
+regionInference :: HG.HGAnalysis s
+regionInference = HG.singleHGAnalysis (nonFatal . HG.inferDeclEvent)
 
 -- | Run the "language-c" semantic analysis pass on the given C translation unit and simultaneously
 -- apply the region unification algorithm to all structs with a region attribute.
@@ -41,7 +42,7 @@ getInferredStructTagRegions = makeRegionInferenceResult <$> HG.frozenRegionUnifi
 -- struct tags to their inferred region schemes.
 inferRegions :: CTranslUnit -> HG.HGTrav s (A.GlobalDecls, RegionInferenceResult)
 inferRegions u = do
-  g <- HG.withHGAnalysis (nonFatal . HG.inferDeclEvent) $ A.analyseAST u
+  g <- HG.withHGAnalysis regionInference $ A.analyseAST u
   regions <- HG.hoistPointerRegionAnalysis $ getInferredStructTagRegions
   return (g, regions)
 
@@ -54,8 +55,8 @@ nonFatal comp = A.catchTravError comp (\e -> A.recordError $ changeErrorLevel e 
 -- uses of raw pointers into the managed region.  Throws a 'CentrinelFatalError' if
 -- there was a fatal error, otherwise returns inference results and a list of
 -- non-fatal analysis errors.
-think :: Monad m => NP.AnalysisOpts -> CTranslUnit -> ExceptT CentrinelFatalError m ((A.GlobalDecls, RegionInferenceResult), CentrinelAnalysisErrors)
-think npOpts u = withExceptT CentAbortedAnalysisError $ HG.evalHGTrav $ do
-  grir@(g,rir) <- inferRegions u
+think :: Monad m => NP.AnalysisOpts -> CTranslUnit -> ExceptT CentrinelFatalError m CentrinelAnalysisErrors
+think npOpts u = HG.evalHGTrav $ do
+  (g,rir) <- inferRegions u
   NP.runInferenceResultT (nonFatal $ NP.analyze npOpts $ A.gObjs g) (A.gTypeDefs g) rir
-  return grir
+  return ()

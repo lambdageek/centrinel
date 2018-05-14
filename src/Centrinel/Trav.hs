@@ -9,30 +9,26 @@
 module Centrinel.Trav (
   -- * Extensible analysis monad
   HGTrav
-  , runHGTrav
   , evalHGTrav
+  -- * Analysis composition
   , HGAnalysis
+  , singleHGAnalysis
   , withHGAnalysis
   -- * Pointer region analysis
-  , PointerRegionAnalysisT (..)
-  , RegionIdentMap
-  , frozenRegionUnificationState
   , hoistPointerRegionAnalysis
   ) where
 
 
+import Control.Applicative ((*>))
 import Control.Monad.Trans.Class 
 import Control.Monad.Trans.Reader (ReaderT)
-import Control.Monad.Except (ExceptT (..))
+import Control.Monad.Except (ExceptT(..))
 import qualified Control.Monad.Trans.Reader as Reader
-import Control.Monad.Trans.State.Lazy (StateT)
-import qualified Control.Monad.Trans.State.Lazy as State
 
 import Data.Bifunctor (Bifunctor(..))
 import Data.Foldable (foldMap)
-import qualified Data.Map.Lazy as Map
+import qualified Data.Semigroup
 
-import Language.C.Data.Ident (SUERef)
 import Language.C.Data.Error (CError, fromError)
 
 import Language.C.Analysis.SemRep (DeclEvent)
@@ -40,28 +36,33 @@ import qualified Language.C.Analysis.TravMonad as AM
 import Language.C.Analysis.TravMonad.Instances ()
 
 import qualified Centrinel.Region.Ident as HGId
-import Centrinel.Region.Region (RegionScheme)
 import qualified Centrinel.Region.Unification as U
-import qualified Centrinel.Region.Unification.Term as U
 import Centrinel.Types (CentrinelAnalysisError (..)
                        , CentrinelAnalysisErrors
-                       , singleAnalysisError)
-import Centrinel.Warning (hgWarn)
+                       , singleAnalysisError
+                       , CentrinelFatalError(CentAbortedAnalysisError))
+import Centrinel.PointerRegionAnalysis (PointerRegionAnalysisT, evalPointerRegionAnalysisT)
 
-type HGAnalysis s = DeclEvent -> HGTrav s ()
+-- | An 'HGAnalysis' can perform some stateful action based on the incoming 'DeclEvent'.
+-- The analyses form a 'Monoid' that just executes them in sequence
+newtype HGAnalysis s = HGAnalysis { execHGAnalysis :: DeclEvent -> HGTrav s () }
 
-type RegionIdentMap = Map.Map HGId.RegionIdent U.RegionUnifyTerm
+-- | Make a singleton analysis
+singleHGAnalysis :: (DeclEvent -> HGTrav s ()) -> HGAnalysis s
+singleHGAnalysis = HGAnalysis
 
--- | Monad transformer that adds extensible analyses on top of 'HGTrav'
--- note that 'HGAnalysis' is mutually defined with 'HGTrav', so the monad stack is actually fixed.
+instance Data.Semigroup.Semigroup (HGAnalysis s) where
+  (HGAnalysis a1) <> (HGAnalysis a2) = HGAnalysis (a1 *> a2)
+
+instance Monoid (HGAnalysis s) where
+  mempty = HGAnalysis $ const $ return ()
+  mappend = (Data.Semigroup.<>)
+
+-- | Monad transformer that adds extensible analyses on top of 'HGTrav'.
+--
+-- Note that 'HGAnalysis' is mutually defined with 'HGTrav', so the monad stack
+-- is actually fixed.
 type TravT s = ReaderT (HGAnalysis s)
-
--- | Monad transformer that adds pointer region analysis on top of any underlying monad.
-newtype PointerRegionAnalysisT m a = PointerRegionAnalysisT { unPointerRegionAnalysisT :: StateT RegionIdentMap (U.UnifyRegT m) a }
-                             deriving (Functor, Applicative, Monad)
-
-instance MonadTrans PointerRegionAnalysisT where
-  lift m = PointerRegionAnalysisT (lift $ lift m)
 
 -- | The fixed monad stack for extensible semantic analyses of C programs.
 -- It's built on top of the base monad 'AM.Trav' that we build up with
@@ -69,120 +70,37 @@ instance MonadTrans PointerRegionAnalysisT where
 -- 'handleDecl' event handling callbacks that are used to consume the C
 -- declarations.
 newtype HGTrav s a = HGTrav { unHGTrav :: TravT s (PointerRegionAnalysisT (AM.Trav s)) a}
-  deriving (Functor, Applicative, Monad)
-
-deriving instance AM.MonadName m => AM.MonadName (PointerRegionAnalysisT m)
-
-deriving instance AM.MonadName (HGTrav s)
-
-deriving instance AM.MonadSymtab m => AM.MonadSymtab (PointerRegionAnalysisT m)
-
-deriving instance AM.MonadSymtab (HGTrav s)
-
-instance AM.MonadCError m => AM.MonadCError (PointerRegionAnalysisT m) where
-  throwTravError = lift . AM.throwTravError
-  catchTravError (PointerRegionAnalysisT c) handler = PointerRegionAnalysisT (AM.catchTravError c (unPointerRegionAnalysisT . handler))
-  recordError = lift . AM.recordError
-  getErrors = lift AM.getErrors
-
-instance AM.MonadCError (HGTrav s) where
-  throwTravError = HGTrav . AM.throwTravError
-  catchTravError (HGTrav c) handler = HGTrav (AM.catchTravError c (unHGTrav . handler))
-  recordError = HGTrav . AM.recordError
-  getErrors = HGTrav $ AM.getErrors
-
-deriving instance AM.MonadCError m => U.RegionUnification (PointerRegionAnalysisT m)
-  
-deriving instance U.RegionUnification (HGTrav s)
-
-deriving instance AM.MonadCError m => U.ApplyUnificationState (PointerRegionAnalysisT m)
-
-deriving instance U.ApplyUnificationState (HGTrav s)
-
-(-:=) :: (AM.MonadCError m, U.RegionUnification m) => U.RegionVar -> Maybe U.RegionUnifyTerm -> m U.RegionUnifyTerm
-v -:= Nothing = return (U.regionUnifyVar v)
-v -:= Just r = do
-  AM.catchTravError (U.sameRegion (U.regionUnifyVar v) r)
-    (\_err -> do
-        AM.recordError (hgWarn "failed to unify regions" Nothing) -- TODO: region info
-        return (U.regionUnifyVar v))
-
-getRegionIdent :: Monad m => HGId.RegionIdent -> PointerRegionAnalysisT m (Maybe (U.RegionUnifyTerm))
-getRegionIdent i = PointerRegionAnalysisT $ State.gets (Map.lookup i)
-
-putRegionIdent :: Monad m => HGId.RegionIdent -> U.RegionUnifyTerm -> PointerRegionAnalysisT m ()
-putRegionIdent i m = PointerRegionAnalysisT $ State.modify' (Map.insert i m)
-
--- | Gets a mapping of the region identifiers that have been noted by
--- unification to their 'RegionScheme' as implied by the constraints available
--- at the time of the call.
-frozenRegionUnificationState :: AM.MonadCError m => PointerRegionAnalysisT m (Map.Map SUERef RegionScheme)
-frozenRegionUnificationState = do
-  sueRegions <- PointerRegionAnalysisT $ State.gets munge
-  traverse (fmap U.extractRegionScheme . U.applyUnificationState) sueRegions
-  where
-    munge :: Map.Map HGId.RegionIdent U.RegionUnifyTerm -> Map.Map SUERef U.RegionUnifyTerm
-    munge = Map.mapKeysMonotonic onlySUERef . Map.filterWithKey (\k -> const (isStructTag k))
-    onlySUERef :: HGId.RegionIdent -> SUERef
-    onlySUERef (HGId.StructTagId sue) = sue
-    onlySUERef (HGId.TypedefId {}) = error "unexpected TypedefId in onlySUERef"
-    isStructTag :: HGId.RegionIdent -> Bool
-    isStructTag (HGId.StructTagId {}) = True
-    isStructTag (HGId.TypedefId {}) = False
-
-instance AM.MonadCError m => HGId.RegionAssignment (PointerRegionAnalysisT m) where
-  assignRegion i = do
-    v <- U.newRegion
-    r <- getRegionIdent i
-    r' <- v -:= r
-    putRegionIdent i r'
-    return v
-
-deriving instance HGId.RegionAssignment (HGTrav s)
+  deriving (Functor, Applicative, Monad
+           , AM.MonadName, AM.MonadSymtab, AM.MonadCError
+           , U.RegionUnification, U.ApplyUnificationState
+           , HGId.RegionAssignment)
 
 instance AM.MonadTrav (HGTrav s) where
   handleDecl ev = do
     handler <- HGTrav Reader.ask
-    handler ev
+    execHGAnalysis handler ev
 
 hoistPointerRegionAnalysis :: (forall m . AM.MonadCError m => PointerRegionAnalysisT m a) -> HGTrav s a
 hoistPointerRegionAnalysis comp = HGTrav $ lift comp
 
 withHGAnalysis :: HGAnalysis s -> HGTrav s a -> HGTrav s a
 withHGAnalysis az =
-  HGTrav . Reader.local (addAnalysis az) . unHGTrav
-  where
-    -- new analysis runs last
-    addAnalysis m = (>> m)
-
-runHGTrav :: Monad m
-          => HGTrav () a
-          -> ExceptT CentrinelAnalysisErrors m ((a, RegionIdentMap), CentrinelAnalysisErrors)
-runHGTrav = helper State.runStateT
+  HGTrav . Reader.local (Data.Semigroup.<> az) . unHGTrav
 
 evalHGTrav :: Monad m
            => HGTrav () a
-          -> ExceptT CentrinelAnalysisErrors m (a, CentrinelAnalysisErrors)
-evalHGTrav = helper State.evalStateT
-
-helper :: Monad m
-       => (StateT RegionIdentMap (U.UnifyRegT (AM.Trav t)) a
-           -> Map.Map k b
-           -> U.UnifyRegT (AM.Trav ()) r)
-       -> HGTrav t a
-       -> ExceptT CentrinelAnalysisErrors m (r, CentrinelAnalysisErrors)
-helper destructState (HGTrav comp) =
-  ExceptT $ return . fixupErrors $ AM.runTrav_ $ U.runUnifyRegT (destructState (unPointerRegionAnalysisT (Reader.runReaderT comp az)) Map.empty)
+           -> ExceptT CentrinelFatalError m CentrinelAnalysisErrors
+evalHGTrav (HGTrav comp) =
+  ExceptT $ return $ fixupErrors $ evalTrav $ evalPointerRegionAnalysisT $ Reader.runReaderT comp mempty
   where
-    az = const (return ())
-    -- change errors and warnings from one form to another
-    fixupFatalNonFatal :: (e1 -> e2) -> (w1 -> w2)
-                       -> Either e1 (a, w1) -> Either e2 (a, w2)
-    fixupFatalNonFatal fErr fWarn = bimap fErr (fmap fWarn)
-    -- refine 'CError' errors and warnings to 'CentrinelAnalysisError'
-    fixupErrors :: Either [CError] (a, [CError])
-                -> Either CentrinelAnalysisErrors (a, CentrinelAnalysisErrors)
-    fixupErrors = fixupFatalNonFatal (foldMap centrinelAnalysisError) (foldMap centrinelAnalysisError)
+    -- refine normal 'CError' errors and warnings to 'CentrinelAnalysisError'
+    -- and abnormal ones to 'CentrinelFatalError'
+    fixupErrors :: Either [CError] [CError]
+                -> Either CentrinelFatalError CentrinelAnalysisErrors
+    fixupErrors = bimap (CentAbortedAnalysisError . foldMap centrinelAnalysisError) (foldMap centrinelAnalysisError)
+
+    evalTrav :: AM.Trav () a -> Either [CError] [CError]
+    evalTrav = fmap snd . AM.runTrav_
 
 
 -- | Refine an existentially-packed 'CError' into one of the well-known Centrinel

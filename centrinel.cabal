@@ -32,6 +32,7 @@ library
                        Centrinel.Report.Types,
                        Centrinel.Warning,
                        Centrinel.Trav,
+                       Centrinel.PointerRegionAnalysis,
                        Centrinel.Region.Region,
                        Centrinel.Region.Ident,
                        Centrinel.RegionMismatchError,

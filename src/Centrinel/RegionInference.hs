@@ -3,6 +3,7 @@
 {-# LANGUAGE FunctionalDependencies #-}
 module Centrinel.RegionInference (inferDeclEvent, hasRegionAttr) where
 
+import Control.Monad (void)
 import Data.Monoid (First(..))
 
 -- data
@@ -18,7 +19,7 @@ import qualified Language.C.Analysis.SemRep as A
 
 import Centrinel.Region.Region
 import Centrinel.Region.Unification
-import Centrinel.Region.Unification.Term (RegionVar)
+import Centrinel.Region.Unification.Term (RegionVar, regionUnifyVar)
 import Centrinel.Region.Ident
 
 inferDeclEvent :: (RegionAssignment RegionIdent RegionVar m, RegionUnification m) => A.DeclEvent -> m ()
@@ -32,14 +33,14 @@ inferDeclEvent e =
       unifyWithAttrs r attrs ni
       m <- deriveRegionFromMember structTy
       case m of
-        Just r' -> sameRegion r' r
+        Just r' -> void $ sameRegion (regionUnifyVar r') (regionUnifyVar r)
         Nothing -> return ()
     A.TypeDefEvent (A.TypeDef typedefIdent ty attrs ni) -> do
       m <- deriveRegionFromType ty
       r <- assignRegion (TypedefId typedefIdent)
       unifyWithAttrs r attrs ni
       case m of
-        Just r' -> sameRegion r' r
+        Just r' -> void $ sameRegion (regionUnifyVar r') (regionUnifyVar r)
         Nothing -> return ()
     _ -> return ()
 

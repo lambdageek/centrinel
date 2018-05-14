@@ -31,7 +31,7 @@ defaultPlan = Plan
 runPlan :: Monad m => Plan -> NP.AnalysisOpts -> CTranslUnit -> ExceptT CentrinelFatalError m CentrinelAnalysisErrors
 runPlan Plan opts = fmap snd . think opts
 
-getInferredStructTagRegions :: HG.HGTrav s RegionInferenceResult
+getInferredStructTagRegions :: A.MonadCError m => HG.PointerAnalysisT m RegionInferenceResult
 getInferredStructTagRegions = makeRegionInferenceResult <$> HG.frozenRegionUnificationState
 
 -- | Run the "language-c" semantic analysis pass on the given C translation unit and simultaneously
@@ -42,7 +42,7 @@ getInferredStructTagRegions = makeRegionInferenceResult <$> HG.frozenRegionUnifi
 inferRegions :: CTranslUnit -> HG.HGTrav s (A.GlobalDecls, RegionInferenceResult)
 inferRegions u = do
   g <- HG.withHGAnalysis (nonFatal . HG.inferDeclEvent) $ A.analyseAST u
-  regions <- getInferredStructTagRegions
+  regions <- HG.hoistPointerAnalysis $ getInferredStructTagRegions
   return (g, regions)
 
 -- | Catch any errors due to the given computation, record them as warnings and continue.

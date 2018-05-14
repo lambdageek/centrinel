@@ -23,7 +23,7 @@ import Centrinel.RegionMismatchError (RegionMismatchError)
  
 class Monad m => RegionUnification m where
   newRegion :: m RegionVar
-  sameRegion :: RegionVar -> RegionVar -> m ()
+  sameRegion :: RegionUnifyTerm -> RegionUnifyTerm -> m RegionUnifyTerm
   constantRegion :: RegionVar -> Region -> m ()
   -- attach
   regionAddLocation :: C.CNode n => RegionVar -> n -> m ()
@@ -54,10 +54,10 @@ instance Monad m => U.BindingMonad RegionTerm RegionVar (UnifyRegT m) where
 
 instance C.MonadCError m => RegionUnification (UnifyRegT m) where
   newRegion = UnifyRegT (fmap RegionVar U.freeVar)
-  sameRegion v1 v2 = do
-    e <- unify (regionUnifyVar v1) (regionUnifyVar v2)
+  sameRegion m1 m2 = do
+    e <- unify m1 m2
     case e of
-      Right _uterm -> return ()
+      Right uterm -> return uterm
       Left err -> C.throwTravError err
   constantRegion v c = do
     e <- unify (regionUnifyVar v) (regionUnifyTerm $ constRegionTerm c)

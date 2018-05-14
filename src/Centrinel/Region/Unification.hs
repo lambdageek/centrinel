@@ -1,9 +1,13 @@
 -- | Region unification monad and term structure
-{-# language RankNTypes, FunctionalDependencies, GeneralizedNewtypeDeriving #-}
+{-# language RankNTypes, FunctionalDependencies, GeneralizedNewtypeDeriving
+    , UndecidableInstances
+  #-}
 module Centrinel.Region.Unification where
 
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.Except
+import qualified Control.Monad.State.Lazy as StL
+import qualified Control.Monad.Reader as Rd
 
 import qualified Control.Unification as U
 import qualified Control.Unification.IntVar as U
@@ -17,12 +21,12 @@ import Centrinel.Region.Region (Region, RegionScheme(..))
 import Centrinel.Region.Unification.Term
 import Centrinel.RegionMismatchError (RegionMismatchError)
  
-class Monad m => RegionUnification v m | m -> v where
-  newRegion :: m v
-  sameRegion :: v -> v -> m ()
-  constantRegion :: v -> Region -> m ()
+class Monad m => RegionUnification m where
+  newRegion :: m RegionVar
+  sameRegion :: RegionVar -> RegionVar -> m ()
+  constantRegion :: RegionVar -> Region -> m ()
   -- attach
-  regionAddLocation :: C.CNode n => v -> n -> m ()
+  regionAddLocation :: C.CNode n => RegionVar -> n -> m ()
 
 class ApplyUnificationState m where
   applyUnificationState :: RegionUnifyTerm -> m RegionUnifyTerm
@@ -48,7 +52,7 @@ instance Monad m => U.BindingMonad RegionTerm RegionVar (UnifyRegT m) where
   freeVar = UnifyRegT $ fmap RegionVar $ U.freeVar
   bindVar v t = UnifyRegT $ U.bindVar (unRegionVar v) (fmap unRegionVar t)
 
-instance C.MonadCError m => RegionUnification RegionVar (UnifyRegT m) where
+instance C.MonadCError m => RegionUnification (UnifyRegT m) where
   newRegion = UnifyRegT (fmap RegionVar U.freeVar)
   sameRegion v1 v2 = do
     e <- unify (regionUnifyVar v1) (regionUnifyVar v2)
@@ -96,3 +100,21 @@ runFailableUnify = runExceptT
 unify :: Monad m => RegionUnifyTerm -> RegionUnifyTerm -> UnifyRegT m (Either RegionMismatchError RegionUnifyTerm)
 unify m1 m2 = runFailableUnify $ U.unify m1 m2
 
+
+instance RegionUnification m => RegionUnification (StL.StateT s m) where
+  newRegion = lift newRegion
+  sameRegion = \v1 v2 -> lift (sameRegion v1 v2)
+  constantRegion = \v r -> lift (constantRegion v r)
+  regionAddLocation = \v n -> lift (regionAddLocation v n)
+
+instance RegionUnification m => RegionUnification (Rd.ReaderT r m) where
+  newRegion = lift newRegion
+  sameRegion = \v1 v2 -> lift (sameRegion v1 v2)
+  constantRegion = \v r -> lift (constantRegion v r)
+  regionAddLocation = \v n -> lift (regionAddLocation v n)
+
+instance (Monad m, ApplyUnificationState m) => ApplyUnificationState (StL.StateT s m) where
+  applyUnificationState = lift . applyUnificationState
+
+instance (Monad m, ApplyUnificationState m) => ApplyUnificationState (Rd.ReaderT r m) where
+  applyUnificationState = lift . applyUnificationState

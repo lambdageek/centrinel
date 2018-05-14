@@ -5,7 +5,7 @@
 -- 2. and a unification state of region unification constraints and a map from C types to region unification variables.
 --
 --
-{-# language GeneralizedNewtypeDeriving, LambdaCase, ViewPatterns #-}
+{-# language GeneralizedNewtypeDeriving, LambdaCase, ViewPatterns, StandaloneDeriving #-}
 module Centrinel.Trav (
   HGTrav
   , runHGTrav
@@ -48,15 +48,30 @@ type HGAnalysis s = DeclEvent -> HGTrav s ()
 
 type RegionIdentMap = Map.Map HGId.RegionIdent U.RegionUnifyTerm
 
-newtype HGTrav s a = HGTrav { unHGTrav :: ReaderT (HGAnalysis s) (StateT RegionIdentMap (U.UnifyRegT (AM.Trav s))) a}
+type TravT s = ReaderT (HGAnalysis s)
+
+newtype PointerAnalysisT m a = PointerAnalysisT { unPointerAnalysisT :: StateT RegionIdentMap (U.UnifyRegT m) a }
+                             deriving (Functor, Applicative, Monad)
+
+instance MonadTrans PointerAnalysisT where
+  lift m = PointerAnalysisT (lift $ lift m)
+
+newtype HGTrav s a = HGTrav { unHGTrav :: TravT s (PointerAnalysisT (AM.Trav s)) a}
   deriving (Functor, Applicative, Monad)
 
-instance AM.MonadName (HGTrav s) where
-  genName = HGTrav AM.genName
+deriving instance AM.MonadName m => AM.MonadName (PointerAnalysisT m)
 
-instance AM.MonadSymtab (HGTrav s) where
-  getDefTable = HGTrav AM.getDefTable
-  withDefTable = HGTrav . AM.withDefTable
+deriving instance AM.MonadName (HGTrav s)
+
+deriving instance AM.MonadSymtab m => AM.MonadSymtab (PointerAnalysisT m)
+
+deriving instance AM.MonadSymtab (HGTrav s)
+
+instance AM.MonadCError m => AM.MonadCError (PointerAnalysisT m) where
+  throwTravError = lift . AM.throwTravError
+  catchTravError (PointerAnalysisT c) handler = PointerAnalysisT (AM.catchTravError c (unPointerAnalysisT . handler))
+  recordError = lift . AM.recordError
+  getErrors = lift AM.getErrors
 
 instance AM.MonadCError (HGTrav s) where
   throwTravError = HGTrav . AM.throwTravError
@@ -64,19 +79,18 @@ instance AM.MonadCError (HGTrav s) where
   recordError = HGTrav . AM.recordError
   getErrors = HGTrav $ AM.getErrors
 
-instance U.RegionUnification U.RegionVar (HGTrav s) where
-  newRegion = HGTrav $ lift $ lift U.newRegion
-  sameRegion v = HGTrav . lift . lift . U.sameRegion v
-  constantRegion v  = HGTrav . lift . lift . U.constantRegion v
-  regionAddLocation v = HGTrav . lift . lift . U.regionAddLocation v
+deriving instance AM.MonadCError m => U.RegionUnification (PointerAnalysisT m)
+  
+deriving instance U.RegionUnification (HGTrav s)
 
-instance U.ApplyUnificationState (HGTrav s) where
-  applyUnificationState = HGTrav . lift . lift . U.applyUnificationState
+deriving instance AM.MonadCError m => U.ApplyUnificationState (PointerAnalysisT m)
+
+deriving instance U.ApplyUnificationState (HGTrav s)
 
 (-:=) :: U.RegionVar -> Maybe U.RegionUnifyTerm -> HGTrav s U.RegionUnifyTerm
 v -:= Nothing = return (U.regionUnifyVar v)
 v -:= Just r = do
-  m <- HGTrav $ lift $ lift $ U.unify (U.regionUnifyVar v) r
+  m <- HGTrav $ lift $ PointerAnalysisT $ lift $ U.unify (U.regionUnifyVar v) r
   case m of
     Right r' -> return r'
     Left _err -> do
@@ -84,17 +98,17 @@ v -:= Just r = do
       return (U.regionUnifyVar v)
 
 getRegionIdent :: HGId.RegionIdent -> HGTrav s (Maybe (U.RegionUnifyTerm))
-getRegionIdent i = HGTrav $ lift $ State.gets (Map.lookup i)
+getRegionIdent i = HGTrav $ lift $ PointerAnalysisT $ State.gets (Map.lookup i)
 
 putRegionIdent :: HGId.RegionIdent -> U.RegionUnifyTerm -> HGTrav s ()
-putRegionIdent i m = HGTrav $ lift $ State.modify' (Map.insert i m)
+putRegionIdent i m = HGTrav $ lift $ PointerAnalysisT $ State.modify' (Map.insert i m)
 
 -- | Gets a mapping of the region identifiers that have been noted by
 -- unification to their 'RegionScheme' as implied by the constraints available
 -- at the time of the call.
 frozenRegionUnificationState :: HGTrav s (Map.Map SUERef RegionScheme)
 frozenRegionUnificationState = do
-  sueRegions <- HGTrav $ lift $ State.gets munge
+  sueRegions <- HGTrav $ lift $ PointerAnalysisT $ State.gets munge
   traverse (fmap U.extractRegionScheme . U.applyUnificationState) sueRegions
   where
     munge :: Map.Map HGId.RegionIdent U.RegionUnifyTerm -> Map.Map SUERef U.RegionUnifyTerm
@@ -143,7 +157,7 @@ helper :: Monad m
        -> HGTrav t a
        -> ExceptT CentrinelAnalysisErrors m (r, CentrinelAnalysisErrors)
 helper destructState (HGTrav comp) =
-  ExceptT $ return . fixupErrors $ AM.runTrav_ $ U.runUnifyRegT (destructState (Reader.runReaderT comp az) Map.empty)
+  ExceptT $ return . fixupErrors $ AM.runTrav_ $ U.runUnifyRegT (destructState (unPointerAnalysisT (Reader.runReaderT comp az)) Map.empty)
   where
     az = const (return ())
     -- change errors and warnings from one form to another

@@ -18,9 +18,10 @@ import qualified Language.C.Analysis.SemRep as A
 
 import Centrinel.Region.Region
 import Centrinel.Region.Unification
+import Centrinel.Region.Unification.Term (RegionVar)
 import Centrinel.Region.Ident
 
-inferDeclEvent :: (RegionAssignment RegionIdent v m, RegionUnification v m) => A.DeclEvent -> m ()
+inferDeclEvent :: (RegionAssignment RegionIdent RegionVar m, RegionUnification m) => A.DeclEvent -> m ()
 inferDeclEvent e =
   case e of
     A.TagEvent (A.CompDef structTy@(A.CompType suref A.StructTag _ attrs ni)) -> do
@@ -44,7 +45,7 @@ inferDeclEvent e =
 
 -- | @unifyWithAttrs r attr ni@ unifies the region @r@ with any regions attributes found among @attr@
 -- and adds the location of @ni@ to the occurrences of @r@.
-unifyWithAttrs :: (C.CNode n, RegionUnification v m) => v -> A.Attributes -> n -> m ()
+unifyWithAttrs :: (C.CNode n, RegionUnification m) => RegionVar -> A.Attributes -> n -> m ()
 unifyWithAttrs r attrs ni =
   case hasRegionAttr attrs of
     Just rc -> do
@@ -59,19 +60,19 @@ hasRegionAttr = getFirst . foldMap (First . from)
                                                                Just (Region $ fromInteger $ Syn.getCInteger r)
     from _ = Nothing
 
-withLocation :: (RegionUnification v m, C.CNode n) => n -> Maybe v -> m (Maybe v)
+withLocation :: (RegionUnification m, C.CNode n) => n -> Maybe RegionVar -> m (Maybe RegionVar)
 withLocation ni m = do
   case m of
     Just r -> regionAddLocation r ni
     Nothing -> return ()
   return m
 
-deriveRegionFromMember :: (RegionAssignment RegionIdent v m, RegionUnification v m) => A.CompType -> m (Maybe v)
+deriveRegionFromMember :: (RegionAssignment RegionIdent RegionVar m, RegionUnification m) => A.CompType -> m (Maybe RegionVar)
 deriveRegionFromMember (A.CompType _suref A.StructTag (A.MemberDecl (A.VarDecl _varName _dattrs memberType) Nothing niMember :_) _ _ni) =
   deriveRegionFromType memberType >>= withLocation niMember
 deriveRegionFromMember _ = return Nothing
 
-deriveRegionFromType :: (RegionAssignment RegionIdent v m, RegionUnification v m) => A.Type -> m (Maybe v)
+deriveRegionFromType :: (RegionAssignment RegionIdent RegionVar m, RegionUnification m) => A.Type -> m (Maybe RegionVar)
 deriveRegionFromType (A.DirectType t _qs _attrs) =
   -- the _attrs here don't seem to work when, for example, we have
   --   typedef struct __attribute__((...)) TagName TypeDefName;
@@ -84,7 +85,7 @@ deriveRegionFromTypeName :: (RegionAssignment RegionIdent v m) => A.TypeName -> 
 deriveRegionFromTypeName (A.TyComp (A.CompTypeRef sueref A.StructTag _ni)) = Just <$> deriveRegionFromSUERef sueref
 deriveRegionFromTypeName _ = return Nothing
 
-deriveRegionFromTypeDefRef :: (RegionAssignment RegionIdent v m, RegionUnification v m) => A.TypeDefRef -> m (Maybe v)
+deriveRegionFromTypeDefRef :: (RegionAssignment RegionIdent RegionVar m, RegionUnification m) => A.TypeDefRef -> m (Maybe RegionVar)
 deriveRegionFromTypeDefRef (A.TypeDefRef _ t _ni) = deriveRegionFromType t
 
 deriveRegionFromSUERef :: (RegionAssignment RegionIdent v m) => Id.SUERef -> m v

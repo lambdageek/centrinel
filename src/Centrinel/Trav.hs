@@ -130,7 +130,7 @@ frozenRegionUnificationState = do
     isStructTag (HGId.StructTagId {}) = True
     isStructTag (HGId.TypedefId {}) = False
 
-instance AM.MonadCError m => HGId.RegionAssignment HGId.RegionIdent U.RegionVar (PointerAnalysisT m) where
+instance AM.MonadCError m => HGId.RegionAssignment (PointerAnalysisT m) where
   assignRegion i = do
     v <- U.newRegion
     r <- getRegionIdent i
@@ -138,7 +138,7 @@ instance AM.MonadCError m => HGId.RegionAssignment HGId.RegionIdent U.RegionVar 
     putRegionIdent i r'
     return v
 
-deriving instance HGId.RegionAssignment HGId.RegionIdent U.RegionVar (HGTrav s)
+deriving instance HGId.RegionAssignment (HGTrav s)
 
 instance AM.MonadTrav (HGTrav s) where
   handleDecl ev = do

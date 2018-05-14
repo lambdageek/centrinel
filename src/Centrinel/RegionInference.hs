@@ -22,7 +22,7 @@ import Centrinel.Region.Unification
 import Centrinel.Region.Unification.Term (RegionVar, regionUnifyVar)
 import Centrinel.Region.Ident
 
-inferDeclEvent :: (RegionAssignment RegionIdent RegionVar m, RegionUnification m) => A.DeclEvent -> m ()
+inferDeclEvent :: (RegionAssignment m, RegionUnification m) => A.DeclEvent -> m ()
 inferDeclEvent e =
   case e of
     A.TagEvent (A.CompDef structTy@(A.CompType suref A.StructTag _ attrs ni)) -> do
@@ -68,12 +68,12 @@ withLocation ni m = do
     Nothing -> return ()
   return m
 
-deriveRegionFromMember :: (RegionAssignment RegionIdent RegionVar m, RegionUnification m) => A.CompType -> m (Maybe RegionVar)
+deriveRegionFromMember :: (RegionAssignment m, RegionUnification m) => A.CompType -> m (Maybe RegionVar)
 deriveRegionFromMember (A.CompType _suref A.StructTag (A.MemberDecl (A.VarDecl _varName _dattrs memberType) Nothing niMember :_) _ _ni) =
   deriveRegionFromType memberType >>= withLocation niMember
 deriveRegionFromMember _ = return Nothing
 
-deriveRegionFromType :: (RegionAssignment RegionIdent RegionVar m, RegionUnification m) => A.Type -> m (Maybe RegionVar)
+deriveRegionFromType :: (RegionAssignment m, RegionUnification m) => A.Type -> m (Maybe RegionVar)
 deriveRegionFromType (A.DirectType t _qs _attrs) =
   -- the _attrs here don't seem to work when, for example, we have
   --   typedef struct __attribute__((...)) TagName TypeDefName;
@@ -82,13 +82,13 @@ deriveRegionFromType (A.DirectType t _qs _attrs) =
 deriveRegionFromType (A.TypeDefType td _qs _attrs) = deriveRegionFromTypeDefRef td
 deriveRegionFromType _ = return Nothing
 
-deriveRegionFromTypeName :: (RegionAssignment RegionIdent v m) => A.TypeName -> m (Maybe v)
+deriveRegionFromTypeName :: (RegionAssignment m) => A.TypeName -> m (Maybe RegionVar)
 deriveRegionFromTypeName (A.TyComp (A.CompTypeRef sueref A.StructTag _ni)) = Just <$> deriveRegionFromSUERef sueref
 deriveRegionFromTypeName _ = return Nothing
 
-deriveRegionFromTypeDefRef :: (RegionAssignment RegionIdent RegionVar m, RegionUnification m) => A.TypeDefRef -> m (Maybe RegionVar)
+deriveRegionFromTypeDefRef :: (RegionAssignment m, RegionUnification m) => A.TypeDefRef -> m (Maybe RegionVar)
 deriveRegionFromTypeDefRef (A.TypeDefRef _ t _ni) = deriveRegionFromType t
 
-deriveRegionFromSUERef :: (RegionAssignment RegionIdent v m) => Id.SUERef -> m v
+deriveRegionFromSUERef :: (RegionAssignment m) => Id.SUERef -> m RegionVar
 deriveRegionFromSUERef suref = assignRegion (StructTagId suref)
 

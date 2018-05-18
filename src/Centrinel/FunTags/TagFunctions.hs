@@ -1,6 +1,6 @@
 -- | A semantic analysis that collects sets of tags applied to function declarations and definitions
 {-# language GeneralizedNewtypeDeriving #-}
-module Centrinel.FunTags.TagFunctions (inferDeclEvent, TagTrackingT, runTagTrackingT, TagInferenceResult) where
+module Centrinel.FunTags.TagFunctions (inferDeclEvent) where
 
 import Data.Semigroup (Option(..))
 import qualified Data.Set as S
@@ -18,7 +18,6 @@ import Language.C.Analysis.SemRep as A
 import Centrinel.FunTags.Tag
 import Centrinel.FunTags.Class
 import Centrinel.FunTags.Unification.Term
-import Centrinel.FunTags.TagTracking
 
 -- | A "language-c" semantic analysis event handler that collects a mapping
 -- from C identifier declarations and definition to tags.  Tags are attached

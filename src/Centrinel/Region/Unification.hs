@@ -6,8 +6,6 @@ module Centrinel.Region.Unification where
 
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.Except
-import qualified Control.Monad.State.Lazy as StL
-import qualified Control.Monad.Reader as Rd
 
 import qualified Control.Unification as U
 import qualified Control.Unification.IntVar as U
@@ -17,35 +15,18 @@ import qualified Control.Unification.IntVar.Extras as ExtraU
 import qualified Language.C.Data.Node as C
 import qualified Language.C.Analysis.TravMonad as C
 
-import Centrinel.Region.Region (Region, RegionScheme(..))
+import Language.C.Analysis.TravMonad.Instances ()
+
+import Centrinel.Region.Region (RegionScheme(..))
 import Centrinel.Region.Unification.Term
 import Centrinel.RegionMismatchError (RegionMismatchError)
  
-class Monad m => RegionUnification m where
-  newRegion :: m RegionVar
-  sameRegion :: RegionUnifyTerm -> RegionUnifyTerm -> m RegionUnifyTerm
-  constantRegion :: RegionVar -> Region -> m ()
-  -- attach
-  regionAddLocation :: C.CNode n => RegionVar -> n -> m ()
-
-class ApplyUnificationState m where
-  applyUnificationState :: RegionUnifyTerm -> m RegionUnifyTerm
+import Centrinel.Region.Class 
 
 newtype UnifyRegT m a = UnifyRegT { unUnifyRegT :: U.IntBindingT RegionTerm m a}
-  deriving (Functor, Applicative, Monad, MonadTrans)
-
-instance C.MonadName m => C.MonadName (UnifyRegT m) where
-  genName = UnifyRegT $ lift $ C.genName
-
-instance C.MonadSymtab m => C.MonadSymtab (UnifyRegT m) where
-  getDefTable = UnifyRegT $ lift $ C.getDefTable
-  withDefTable = UnifyRegT . lift . C.withDefTable
-
-instance C.MonadCError m => C.MonadCError (UnifyRegT m) where
-  throwTravError e = UnifyRegT $ lift $ C.throwTravError e
-  catchTravError m handler = liftCatch (C.catchTravError) m handler
-  recordError e = UnifyRegT $ lift $ C.recordError e
-  getErrors = UnifyRegT $ lift $ C.getErrors
+  deriving (Functor, Applicative, Monad, MonadTrans
+           , C.MonadName, C.MonadSymtab, C.MonadCError
+           )
 
 instance Monad m => U.BindingMonad RegionTerm RegionVar (UnifyRegT m) where
   lookupVar = UnifyRegT . fmap (fmap (fmap RegionVar)) . U.lookupVar . unRegionVar
@@ -70,12 +51,12 @@ instance C.MonadCError m => RegionUnification (UnifyRegT m) where
       Right _uterm -> return ()
       Left _err -> error "unexpected unification failure from regionAddLocation"
 
-instance C.MonadCError m => ApplyUnificationState (UnifyRegT m) where
-  applyUnificationState t = do
-    ans <- runFailableUnify $ U.applyBindings t
-    case ans of
-      Left err -> C.throwTravError err
-      Right term -> return term
+applyUnificationState :: C.MonadCError m => RegionUnifyTerm -> UnifyRegT m RegionUnifyTerm
+applyUnificationState t = do
+  ans <- runFailableUnify $ U.applyBindings t
+  case ans of
+    Left err -> C.throwTravError err
+    Right term -> return term
 
 runUnifyRegT :: Monad m => UnifyRegT m a -> m a
 runUnifyRegT = U.evalIntBindingT . unUnifyRegT
@@ -101,20 +82,3 @@ unify :: Monad m => RegionUnifyTerm -> RegionUnifyTerm -> UnifyRegT m (Either Re
 unify m1 m2 = runFailableUnify $ U.unify m1 m2
 
 
-instance RegionUnification m => RegionUnification (StL.StateT s m) where
-  newRegion = lift newRegion
-  sameRegion = \v1 v2 -> lift (sameRegion v1 v2)
-  constantRegion = \v r -> lift (constantRegion v r)
-  regionAddLocation = \v n -> lift (regionAddLocation v n)
-
-instance RegionUnification m => RegionUnification (Rd.ReaderT r m) where
-  newRegion = lift newRegion
-  sameRegion = \v1 v2 -> lift (sameRegion v1 v2)
-  constantRegion = \v r -> lift (constantRegion v r)
-  regionAddLocation = \v n -> lift (regionAddLocation v n)
-
-instance (Monad m, ApplyUnificationState m) => ApplyUnificationState (StL.StateT s m) where
-  applyUnificationState = lift . applyUnificationState
-
-instance (Monad m, ApplyUnificationState m) => ApplyUnificationState (Rd.ReaderT r m) where
-  applyUnificationState = lift . applyUnificationState

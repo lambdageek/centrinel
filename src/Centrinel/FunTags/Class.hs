@@ -1,6 +1,7 @@
 module Centrinel.FunTags.Class where
 
-import Control.Monad.State.Strict (StateT)
+import Control.Monad.Reader as Rd
+import Control.Monad.State.Strict as StS
 import Control.Monad.Trans (MonadTrans (..))
 import Language.C.Data.Ident (Ident)
 
@@ -20,6 +21,11 @@ class Monad m => TagUnification m where
   -- unifier will be (S1∪S2)∪ρ3 with ρ1 := S2 ∪ ρ3 and ρ2 := S1 ∪ ρ3 where ρ3 is fresh.
   unifyTagTerms :: TagTerm -> TagTerm -> m ()
 
-instance TagUnification m => TagUnification (StateT s m) where
+instance TagUnification m => TagUnification (StS.StateT s m) where
   unifyTagTerms = \t1 t2 -> lift (unifyTagTerms t1 t2)
 
+instance TagUnification m => TagUnification (Rd.ReaderT r m) where
+  unifyTagTerms = \t1 t2 -> lift (unifyTagTerms t1 t2)
+
+instance TagAssignment m => TagAssignment (Rd.ReaderT r m) where
+  assignTag = lift . assignTag

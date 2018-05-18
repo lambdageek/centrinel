@@ -20,6 +20,7 @@ import Language.C.Analysis.TravMonad.Instances ()
 import qualified Centrinel.Region.Ident as HGId
 import Centrinel.Region.Region (RegionScheme)
 import Centrinel.RegionInferenceResult
+import qualified Centrinel.Region.Class as U
 import qualified Centrinel.Region.Unification as U
 import qualified Centrinel.Region.Unification.Term as U
 
@@ -29,12 +30,12 @@ type RegionIdentMap = Map.Map HGId.RegionIdent U.RegionVar
 newtype PointerRegionAnalysisT m a = PointerRegionAnalysisT { unPointerRegionAnalysisT :: StateT RegionIdentMap (U.UnifyRegT m) a }
   deriving (Functor, Applicative, Monad
            , AM.MonadName, AM.MonadSymtab, AM.MonadCError
-           , U.RegionUnification, U.ApplyUnificationState)
+           , U.RegionUnification)
 
 instance MonadTrans PointerRegionAnalysisT where
   lift = PointerRegionAnalysisT . lift . lift
 
-instance AM.MonadCError m => HGId.RegionAssignment (PointerRegionAnalysisT m) where
+instance AM.MonadCError m => U.RegionAssignment (PointerRegionAnalysisT m) where
   assignRegion i = PointerRegionAnalysisT $ do
     m <- State.gets (Map.lookup i)
     case m of
@@ -50,8 +51,12 @@ instance AM.MonadCError m => HGId.RegionAssignment (PointerRegionAnalysisT m) wh
 frozenRegionUnificationState :: AM.MonadCError m => PointerRegionAnalysisT m (Map.Map SUERef RegionScheme)
 frozenRegionUnificationState = do
   sueRegions <- PointerRegionAnalysisT $ State.gets munge
-  traverse (fmap U.extractRegionScheme . U.applyUnificationState . U.regionUnifyVar) sueRegions
+  traverse applyUnificationResults sueRegions
   where
+    applyUnificationResults :: AM.MonadCError m => U.RegionVar -> PointerRegionAnalysisT m RegionScheme
+    applyUnificationResults v = do
+      t <- PointerRegionAnalysisT $ lift $ U.applyUnificationState $ U.regionUnifyVar v
+      return (U.extractRegionScheme t)
     munge :: RegionIdentMap -> Map.Map SUERef U.RegionVar
     munge = Map.mapKeysMonotonic onlySUERef . Map.filterWithKey (\k -> const (isStructTag k))
     onlySUERef :: HGId.RegionIdent -> SUERef

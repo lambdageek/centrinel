@@ -18,7 +18,7 @@ import qualified Language.C.Syntax.Constants as Syn
 import qualified Language.C.Analysis.SemRep as A
 
 import Centrinel.Region.Region
-import Centrinel.Region.Unification
+import Centrinel.Region.Class
 import Centrinel.Region.Unification.Term (RegionVar, regionUnifyVar)
 import Centrinel.Region.Ident
 

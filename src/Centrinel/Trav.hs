@@ -16,6 +16,8 @@ module Centrinel.Trav (
   , withHGAnalysis
   -- * Pointer region analysis
   , hoistPointerRegionAnalysis
+  -- * Function tag tracking analysis
+  , hoistTagTracking
   ) where
 
 
@@ -35,13 +37,15 @@ import Language.C.Analysis.SemRep (DeclEvent)
 import qualified Language.C.Analysis.TravMonad as AM
 import Language.C.Analysis.TravMonad.Instances ()
 
-import qualified Centrinel.Region.Ident as HGId
-import qualified Centrinel.Region.Unification as U
+import qualified Centrinel.Region.Class as U
+import Centrinel.FunTags.Class as TF 
 import Centrinel.Types (CentrinelAnalysisError (..)
                        , CentrinelAnalysisErrors
                        , singleAnalysisError
                        , CentrinelFatalError(CentAbortedAnalysisError))
+
 import Centrinel.PointerRegionAnalysis (PointerRegionAnalysisT, evalPointerRegionAnalysisT)
+import Centrinel.FunTags.TagTracking (TagTrackingT, evalTagTrackingT)
 
 -- | An 'HGAnalysis' can perform some stateful action based on the incoming 'DeclEvent'.
 -- The analyses form a 'Monoid' that just executes them in sequence
@@ -69,19 +73,24 @@ type TravT s = ReaderT (HGAnalysis s)
 -- analysis-specific state, and then close up with 'TravT' which adds the
 -- 'handleDecl' event handling callbacks that are used to consume the C
 -- declarations.
-newtype HGTrav s a = HGTrav { unHGTrav :: TravT s (PointerRegionAnalysisT (AM.Trav s)) a}
+newtype HGTrav s a = HGTrav { unHGTrav :: TravT s (TagTrackingT (PointerRegionAnalysisT (AM.Trav s))) a}
   deriving (Functor, Applicative, Monad
            , AM.MonadName, AM.MonadSymtab, AM.MonadCError
-           , U.RegionUnification, U.ApplyUnificationState
-           , HGId.RegionAssignment)
+           , U.RegionUnification, U.RegionAssignment
+           , TF.TagUnification, TF.TagAssignment)
 
 instance AM.MonadTrav (HGTrav s) where
   handleDecl ev = do
     handler <- HGTrav Reader.ask
     execHGAnalysis handler ev
 
+-- | Run a pointer region analysis computation in the C traversal monad
 hoistPointerRegionAnalysis :: (forall m . AM.MonadCError m => PointerRegionAnalysisT m a) -> HGTrav s a
-hoistPointerRegionAnalysis comp = HGTrav $ lift comp
+hoistPointerRegionAnalysis = HGTrav . lift . lift
+
+-- | Run a function tag tracking analysis in the C traversal monad
+hoistTagTracking :: (forall m . AM.MonadCError m => TagTrackingT m a) -> HGTrav s a
+hoistTagTracking = HGTrav . lift 
 
 withHGAnalysis :: HGAnalysis s -> HGTrav s a -> HGTrav s a
 withHGAnalysis az =
@@ -91,7 +100,7 @@ evalHGTrav :: Monad m
            => HGTrav () a
            -> ExceptT CentrinelFatalError m CentrinelAnalysisErrors
 evalHGTrav (HGTrav comp) =
-  ExceptT $ return $ fixupErrors $ evalTrav $ evalPointerRegionAnalysisT $ Reader.runReaderT comp mempty
+  ExceptT $ return $ fixupErrors $ evalTrav $ evalPointerRegionAnalysisT $ evalTagTrackingT $ Reader.runReaderT comp mempty
   where
     -- refine normal 'CError' errors and warnings to 'CentrinelAnalysisError'
     -- and abnormal ones to 'CentrinelFatalError'
@@ -112,3 +121,4 @@ centrinelAnalysisError = singleAnalysisError . matchError
       e | Just regError <- fromError e -> CARegionMismatchError regError
         | Just nakedPtrError <- fromError e -> CANakedPointerError nakedPtrError
         | otherwise -> CACError e
+

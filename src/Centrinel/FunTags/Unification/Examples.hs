@@ -6,6 +6,7 @@ import Language.C.Data.Ident (internalIdent)
 
 import Centrinel.FunTags.Class
 import Centrinel.FunTags.TagFunctions
+import Centrinel.FunTags.TagTracking
 import Centrinel.FunTags.Tag
 import Centrinel.FunTags.Unification.Term
 

@@ -1,6 +1,8 @@
 -- | Run an analysis plan on a translation unit
 module Centrinel.AnalysisPlan (Plan, defaultPlan, fullPlan, runPlan) where
 
+import qualified Data.Semigroup as Sem
+
 import Control.Monad.Except (ExceptT (..))
 
 import Language.C.Syntax.AST (CTranslUnit)
@@ -59,7 +61,7 @@ type AllInferenceResults = (RegionInferenceResult, FunTagInferenceResult)
 
 inferEverything :: CTranslUnit -> HG.HGTrav s (A.GlobalDecls, AllInferenceResults)
 inferEverything u = do
-  g <- HG.withHGAnalysis (regionInference <> tagsInference) $ A.analyseAST u
+  g <- HG.withHGAnalysis (regionInference Sem.<> tagsInference) $ A.analyseAST u
   allresults <- (,) <$> HG.hoistPointerRegionAnalysis getInferredStructTagRegions <*> HG.hoistTagTracking getFunTagInferenceResult
   return (g, allresults)
 

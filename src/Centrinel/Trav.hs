@@ -86,11 +86,11 @@ instance AM.MonadTrav (HGTrav s) where
 
 -- | Run a pointer region analysis computation in the C traversal monad
 hoistPointerRegionAnalysis :: (forall m . AM.MonadCError m => PointerRegionAnalysisT m a) -> HGTrav s a
-hoistPointerRegionAnalysis = HGTrav . lift . lift
+hoistPointerRegionAnalysis p = HGTrav (lift (lift p))
 
 -- | Run a function tag tracking analysis in the C traversal monad
 hoistTagTracking :: (forall m . AM.MonadCError m => TagTrackingT m a) -> HGTrav s a
-hoistTagTracking = HGTrav . lift 
+hoistTagTracking p = HGTrav (lift p)
 
 withHGAnalysis :: HGAnalysis s -> HGTrav s a -> HGTrav s a
 withHGAnalysis az =
